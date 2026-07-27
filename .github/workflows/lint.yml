@@ -27,7 +27,9 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Format Output
+          \`\`\`
           $(cat format.stderr.txt)
+          \`\`\`
           <details>
             <summary>Details</summary>
             \`\`\`
@@ -38,7 +40,9 @@ jobs:
 
           cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Lint Output
+          \`\`\`
           $(cat stats.stdout.txt)
+          \`\`\`
           <details>
             <summary>Details</summary>
             \`\`\`
