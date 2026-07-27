@@ -1,7 +1,7 @@
-.pyc
-venv/
-.DS_Store
 __pycache__/
+.DS_Store
+.pyc
+.ruff_cache/
+.vscode/
 old_files/
-.github/
-# .vscode/
+.venv/
