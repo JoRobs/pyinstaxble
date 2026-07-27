@@ -34,7 +34,7 @@ jobs:
       - name: Summary
         if: success() || failure()
         run: |
-          if [[ ${{ steps.build.outcome }} ~= (success|failure) ]]; then
+          if [[ ${{ steps.build.outcome }} =~ (success|failure) ]]; then
             cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Build Result
 
@@ -43,7 +43,7 @@ jobs:
           EOF
           fi
 
-          if [[ ${{ steps.format.outcome }} ~= (success|failure) ]]; then
+          if [[ ${{ steps.format.outcome }} =~ (success|failure) ]]; then
             cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Format Output
 
@@ -65,7 +65,7 @@ jobs:
           EOF
           fi
 
-          if [[ ${{ steps.lint.outcome }} ~= (success|failure) ]]; then
+          if [[ ${{ steps.lint.outcome }} =~ (success|failure) ]]; then
             cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Lint Output
 

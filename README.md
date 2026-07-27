@@ -1,6 +1,6 @@
 # Instax-BLE
 
-Forked from javl/InstaxBLE
+Forked from https://github.com/javl/InstaxBLE
 
 <img align="right" style="margin:10px" src="resources/instax-bluetooth.gif">
 
