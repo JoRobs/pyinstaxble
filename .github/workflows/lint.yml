@@ -43,9 +43,7 @@ jobs:
           \`\`\`
 
           </details>
-          EOF
 
-          cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Lint Output
 
           \`\`\`
