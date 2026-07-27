@@ -7,11 +7,6 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: action/cache@v6
-        with:
-          key: uv
-          path: .venv
-
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           python-version: 3.14
