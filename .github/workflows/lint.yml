@@ -22,7 +22,7 @@ jobs:
       - name: Ruff lint
         continue-on-error: true
         run: |
-          uv tool run -q ruff check 2>check.stderr.txt 1>check.stdout.txt
+          uv tool run -q ruff check --diff 2>check.stderr.txt 1>check.stdout.txt
           uv tool run -q ruff check --statistics 2>stats.stderr.txt 1>stats.stdout.txt
 
       - name: Summary
