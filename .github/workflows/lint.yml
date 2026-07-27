@@ -17,31 +17,30 @@ jobs:
         continue-on-error: true
         run: |
           uv tool run -q ruff format --diff 2>format.stderr.txt 1> format.stdout.txt
-          echo "# Ruff Format Output" >> $GITHUB_STEP_SUMMARY
 
       - name: Ruff lint
         continue-on-error: true
         run: |
-          uv tool run -q ruff check --diff 2>check.stderr.txt 1>check.stdout.txt
           uv tool run -q ruff check --statistics 2>stats.stderr.txt 1>stats.stdout.txt
+          uv tool run -q ruff check 2>check.stderr.txt 1>check.stdout.txt
 
       - name: Summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY <<EOF
-            # Ruff Format Output
-            $(cat format.stderr.txt)
-            <details>
-              <summary>Details</summary>
-              $(cat format.stdout.txt)
-            </details>
+          # Ruff Format Output
+          $(cat format.stderr.txt)
+          <details>
+            <summary>Details</summary>
+            $(cat format.stdout.txt)
+          </details>
           EOF
 
           cat >> $GITHUB_STEP_SUMMARY <<EOF
-            # Ruff Lint Output
-            $(cat stats.stdout.txt)
-            <details>
-              <summary>Details</summary>
-              $(cat check.stdout.txt)
-            </details>
+          # Ruff Lint Output
+          $(cat stats.stdout.txt)
+          <details>
+            <summary>Details</summary>
+            $(cat check.stdout.txt)
+          </details>
           EOF
 
