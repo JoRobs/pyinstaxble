@@ -1,25 +1,15 @@
-#!/usr/bin/env python3
-
+import argparse
+import sys
+from io import BytesIO
 from math import ceil
 from struct import pack, unpack_from
 from time import sleep
 
-# Try to import Types with a relative import first
-try:
-    from pyinstaxble.types import EventType, InfoType, PrinterSettings
-    import pyinstaxble.led_patterns as LedPatterns
-except ImportError:
-    # If that fails (which it will if this file is being run directly),
-    # try an absolute import instead
-    from pyinstaxble.types import EventType, InfoType, PrinterSettings
-    import pyinstaxble.led_patterns as LedPatterns
-
-import argparse
-
 import simplepyble
-import sys
 from PIL import Image
-from io import BytesIO
+
+import pyinstaxble.led_patterns as LedPatterns
+from pyinstaxble.types import EventType, InfoType, PrinterSettings
 
 
 class InstaxBLE:
@@ -106,7 +96,7 @@ class InstaxBLE:
         )
         if self.peripheral.mtu:
             print(f"MTU:                 {self.peripheral.mtu()}")
-        print("")
+        print()
 
     def parse_printer_response(self, event, packet):
         """Parse the response packet and print the result"""
@@ -137,7 +127,7 @@ class InstaxBLE:
                 elif (w, h) == (1260, 840):
                     self.printerSettings = PrinterSettings["wide"]
                 else:
-                    exit(f"Unknown image size from printer: {w}x{h}")
+                    sys.exit(f"Unknown image size from printer: {w}x{h}")
 
                 self.chunkSize = self.printerSettings["chunkSize"]
 
@@ -156,13 +146,11 @@ class InstaxBLE:
                 # else:
                 #     self.log('Printer is running on battery')
 
-        elif event == EventType.PRINT_IMAGE_DOWNLOAD_START:
-            self.handle_image_packet_queue()
-
-        elif event == EventType.PRINT_IMAGE_DOWNLOAD_DATA:
-            self.handle_image_packet_queue()
-
-        elif event == EventType.PRINT_IMAGE_DOWNLOAD_END:
+        elif (
+            event == EventType.PRINT_IMAGE_DOWNLOAD_START
+            or event == EventType.PRINT_IMAGE_DOWNLOAD_DATA
+            or event == EventType.PRINT_IMAGE_DOWNLOAD_END
+        ):
             self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
@@ -170,7 +158,6 @@ class InstaxBLE:
 
         elif event == EventType.PRINT_IMAGE:
             self.log("received print confirmation")
-            pass
 
         else:
             self.log(f"Uncaught response from printer. Eventype: {event}")
@@ -198,7 +185,7 @@ class InstaxBLE:
                 self.log("\tResponse packet checksum was invalid!")
                 return
 
-        header, length, op1, op2 = unpack_from(">HHBB", packet)
+        _header, _length, op1, op2 = unpack_from(">HHBB", packet)
         # self.log('\theader: ', header, '\t', self.prettify_bytearray(packet[0:2]))
         # self.log('\tlength: ', length, '\t', self.prettify_bytearray(packet[2:4]))
         # self.log('\top1: ', op1, '\t\t', self.prettify_bytearray(packet[4:5]))
@@ -231,7 +218,7 @@ class InstaxBLE:
 
             if self.peripheral.is_connected():
                 # check if we're using a version of simplepyble that supports reading mtu
-                self.log(f"Connected")
+                self.log("Connected")
 
                 # self.log('Attaching notification_handler')
                 try:
@@ -255,14 +242,13 @@ class InstaxBLE:
         """Disconnect from the printer (if connected)"""
         if self.dummyPrinter:
             return
-        if self.peripheral:
-            if self.peripheral.is_connected():
-                # if len(self.packetsForPrinting) > 0 and not self.cancelled:
-                #     self.log('sending cancel command')
-                #     self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
-                self.log("Disconnecting...")
-                self.peripheral.disconnect()
-                self.log("Disconnected")
+        if self.peripheral and self.peripheral.is_connected():
+            # if len(self.packetsForPrinting) > 0 and not self.cancelled:
+            #     self.log('sending cancel command')
+            #     self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
+            self.log("Disconnecting...")
+            self.peripheral.disconnect()
+            self.log("Disconnected")
 
     def cancel_print(self):
         self.packetsForPrinting = []
@@ -386,11 +372,11 @@ class InstaxBLE:
                 # self.log("sleep")
                 sleep(0.05)
 
-            header, length, op1, op2 = unpack_from(">HHBB", packet)
+            _header, _length, op1, op2 = unpack_from(">HHBB", packet)
             try:
-                event = EventType((op1, op2))
-            except Exception:
-                event = "Unknown event"
+                EventType((op1, op2))
+            except Exception as e:
+                self.log(e.with_traceback())
 
             # self.log(f'sending eventtype: {event}')
 
@@ -544,7 +530,7 @@ class InstaxBLE:
         self.get_printer_status()
 
     def pil_image_to_bytes(
-        self, img: Image.Image, max_size_kb: int = None
+        self, img: Image.Image, max_size_kb: int | None = None
     ) -> bytearray:
         """Convert a PIL image to a bytearray"""
         img_buffer = BytesIO()
@@ -602,8 +588,10 @@ class InstaxBLE:
         sleep(60)
 
 
-def main(args={}):
+def main(args=None):
     """Example usage of the InstaxBLE class"""
+    if args is None:
+        args = {}
     instax = InstaxBLE(**args)
     try:
         # To prevent misprints during development this script sends all the

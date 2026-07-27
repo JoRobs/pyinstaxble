@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from enum import Enum
 
 # Not sure yet where these fit in, but they are used in the original code
