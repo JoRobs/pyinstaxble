@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyinstaxble"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "pillow==12.3.0",
+  "simplepyble==1.0.0",
+]
+
+[project.optional-dependencies]
+dev=[
+  "pycodestyle==2.14.0",
+]

@@ -22,28 +22,28 @@ PrinterSettings = {
     'mini': {
         'modelName': 'Instax Mini Link',
         'chunkSize': 900,
-        'exampleImage': 'example-mini.jpg',
+        'exampleImage': '../resources/example-mini.jpg',
         'width': 600,
         'height': 800
     },
     'square': {
         'modelName': 'Instax Square Link',
         'chunkSize': 1808,
-        'exampleImage': 'example-square.jpg',
+        'exampleImage': '../resources/example-square.jpg',
         'width': 800,
         'height': 800
     },
     'wide': {
         'modelName': 'Instax Wide Link',
         'chunkSize': 900,
-        'exampleImage': 'example-wide.jpg',
+        'exampleImage': '../resources/example-wide.jpg',
         'width': 1260,
         'height': 840
     },
     'dummy': {
         'modelName': 'Dummy Printer',
         'chunkSize': 123,
-        'exampleImage': 'example-mini.jpg',
+        'exampleImage': '../resources/example-mini.jpg',
         'width': 10,
         'height': 20
     }
