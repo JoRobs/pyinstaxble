@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyinstaxble"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "pillow==12.3.0",
+  "simplepyble==1.0.0",
+]
+
+[project.optional-dependencies]
+dev=[
+  "pycodestyle==2.14.0",
+]
+lint = [
+    "ruff>=0.16.0",
+]
+
+[tool.ruff]
+# Set the maximum line length to 79.
+line-length = 79
+
+[tool.ruff.lint]
+ignore = [
+  "BLE001",
+]

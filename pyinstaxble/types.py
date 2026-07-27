@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from enum import Enum
 
 # Not sure yet where these fit in, but they are used in the original code
@@ -19,39 +17,40 @@ Imgproc_COLOR_RGB2YUV_YV12 = 131
 Imgproc_COLOR_BGR2YUV_YV12 = 132
 
 PrinterSettings = {
-    'mini': {
-        'modelName': 'Instax Mini Link',
-        'chunkSize': 900,
-        'exampleImage': 'example-mini.jpg',
-        'width': 600,
-        'height': 800
+    "mini": {
+        "modelName": "Instax Mini Link",
+        "chunkSize": 900,
+        "exampleImage": "../resources/example-mini.jpg",
+        "width": 600,
+        "height": 800,
     },
-    'square': {
-        'modelName': 'Instax Square Link',
-        'chunkSize': 1808,
-        'exampleImage': 'example-square.jpg',
-        'width': 800,
-        'height': 800
+    "square": {
+        "modelName": "Instax Square Link",
+        "chunkSize": 1808,
+        "exampleImage": "../resources/example-square.jpg",
+        "width": 800,
+        "height": 800,
     },
-    'wide': {
-        'modelName': 'Instax Wide Link',
-        'chunkSize': 900,
-        'exampleImage': 'example-wide.jpg',
-        'width': 1260,
-        'height': 840
+    "wide": {
+        "modelName": "Instax Wide Link",
+        "chunkSize": 900,
+        "exampleImage": "../resources/example-wide.jpg",
+        "width": 1260,
+        "height": 840,
     },
-    'dummy': {
-        'modelName': 'Dummy Printer',
-        'chunkSize': 123,
-        'exampleImage': 'example-mini.jpg',
-        'width': 10,
-        'height': 20
-    }
+    "dummy": {
+        "modelName": "Dummy Printer",
+        "chunkSize": 123,
+        "exampleImage": "../resources/example-mini.jpg",
+        "width": 10,
+        "height": 20,
+    },
 }
 
 
-class EventType (Enum):
-    """ Events we can send to the printer """
+class EventType(Enum):
+    """Events we can send to the printer"""
+
     UNKNOWN = (-1, -1)
     SUPPORT_FUNCTION_AND_VERSION_INFO = (0, 0)  # 0x00, 0x00
     DEVICE_INFO_SERVICE = (0, 1)  # 0x00, 0x01
@@ -102,7 +101,10 @@ class EventType (Enum):
     POST_VIEW_UPLOAD = (130, 33)  # 0x82, 0x21
     POST_VIEW_UPLOAD_END = (130, 34)  # 0x82, 0x22
     POST_VIEW_PRINT = (130, 48)  # 0x82, 0x30
-    FRAME_PICTURE_DOWNLOAD_START = (Imgproc_COLOR_RGB2YUV_YV12, 0)  # 0x83, 0x00
+    FRAME_PICTURE_DOWNLOAD_START = (
+        Imgproc_COLOR_RGB2YUV_YV12,
+        0,
+    )  # 0x83, 0x00
     FRAME_PICTURE_DOWNLOAD = (Imgproc_COLOR_RGB2YUV_YV12, 1)  # 0x83, 0x01
     FRAME_PICTURE_DOWNLOAD_END = (Imgproc_COLOR_RGB2YUV_YV12, 2)  # 0x83, 0x02
     FRAME_PICTURE_NAME_SETTING = (Imgproc_COLOR_RGB2YUV_YV12, 3)  # 0x83, 0x03
@@ -118,8 +120,9 @@ class EventType (Enum):
     CAMERA_LOG_FILTER_CLEAR = (Imgproc_COLOR_BGR2YUV_YV12, 8)  # 0x84, 0x08
 
 
-class InfoType (Enum):
-    """ Payload types to use with EventType.DEVICE_INFO_SERVICE """
+class InfoType(Enum):
+    """Payload types to use with EventType.DEVICE_INFO_SERVICE"""
+
     IMAGE_SUPPORT_INFO = 0
     BATTERY_INFO = 1
     PRINTER_FUNCTION_INFO = 2
