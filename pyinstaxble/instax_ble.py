@@ -6,13 +6,13 @@ from time import sleep
 
 # Try to import Types with a relative import first
 try:
-    from .Types import EventType, InfoType, PrinterSettings
-    from . import LedPatterns
+    from pyinstaxble.types import EventType, InfoType, PrinterSettings
+    import pyinstaxble.led_patterns as LedPatterns
 except ImportError:
     # If that fails (which it will if this file is being run directly),
     # try an absolute import instead
-    from Types import EventType, InfoType, PrinterSettings
-    import LedPatterns
+    from pyinstaxble.types import EventType, InfoType, PrinterSettings
+    import pyinstaxble.led_patterns as LedPatterns
 
 import argparse
 

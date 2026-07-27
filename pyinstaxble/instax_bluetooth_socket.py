@@ -1,10 +1,8 @@
 #! /usr/bin/env python3
-from Types import EventType, InfoType
+from pyinstaxble.types import EventType, InfoType
 from struct import pack, unpack_from
 import asyncio
-from bleak import BleakScanner
 import sys
-
 
 if sys.platform == 'linux':
     from InstaxLinux import InstaxLinux as InstaxPlatform
@@ -41,23 +39,6 @@ class InstaxBluetooth(InstaxPlatform):
     def disable_printing(self):
         """ Disable printing. """
         self.printEnabled = False
-
-    # async def find_device(self, timeout=0, mode='ANDROID'):
-    #     """" Scan for our device and return it when found """
-    #     print('Looking for instax printer...')
-    #     secondsTried = 0
-    #     while True:
-    #         devices = await BleakScanner.discover(timeout=1)
-    #         for device in devices:
-    #             if (self.deviceName is None and device.name.startswith('INSTAX-')) or \
-    #                device.name == self.deviceName or device.address == self.deviceAddress:
-    #                 if device.address.startswith('FA:AB:BC'):  # found the IOS endpoint, convert to ANDROID
-    #                     device.address = device.address.replace('FA:AB:BC', '88:B4:36')
-    #                     device.name = device.name.replace('IOS', 'ANDROID')
-    #                 return device
-    #         secondsTried += 1
-    #         if timeout != 0 and secondsTried >= timeout:
-    #             return None
 
     def create_color_payload(self, colorArray, speed, repeat, when):
         """
