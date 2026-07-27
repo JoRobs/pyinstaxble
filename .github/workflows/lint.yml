@@ -27,27 +27,38 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Format Output
+
           \`\`\`
+          Summary
+
           $(cat format.stderr.txt)
           \`\`\`
+
           <details>
-            <summary>Details</summary>
-            \`\`\`
-            $(cat format.stdout.txt)
-            \`\`\`
+          <summary>Details</summary>
+
+          \`\`\`
+          $(cat format.stdout.txt)
+          \`\`\`
+
           </details>
           EOF
 
           cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Ruff Lint Output
+
           \`\`\`
+          Summary
+
           $(cat stats.stdout.txt)
           \`\`\`
+
           <details>
-            <summary>Details</summary>
-            \`\`\`
-            $(cat check.stdout.txt)
-            \`\`\`
+          <summary>Details</summary>
+
+          \`\`\`
+          $(cat check.stdout.txt)
+          \`\`\`
           </details>
           EOF
 
