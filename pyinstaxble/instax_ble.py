@@ -291,7 +291,7 @@ class InstaxBLE:
                             self.deviceName is None
                             and self.deviceAddress is None
                             and foundName.startswith("INSTAX-")
-                            and foundName.endswith("(IOS)")
+                            and foundName.endswith("(BLE)")
                         )
                     ):
                         # if foundAddress.startswith('FA:AB:BC'):  # start of IOS endpooint
