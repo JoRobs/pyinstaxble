@@ -30,9 +30,9 @@ jobs:
           $(cat format.stderr.txt)
           <details>
             <summary>Details</summary>
-            ```
+            \`\`\`
             $(cat format.stdout.txt)
-            ```
+            \`\`\`
           </details>
           EOF
 
@@ -41,9 +41,9 @@ jobs:
           $(cat stats.stdout.txt)
           <details>
             <summary>Details</summary>
-            ```
+            \`\`\`
             $(cat check.stdout.txt)
-            ```
+            \`\`\`
           </details>
           EOF
 
