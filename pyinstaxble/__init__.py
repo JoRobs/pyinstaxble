@@ -1,1 +1,1 @@
-from pyinstaxble.instax_ble import InstaxBLE
+from pyinstaxble.instax_ble import InstaxBLE as InstaxBLE
