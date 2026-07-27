@@ -1,0 +1,33 @@
+name: Lint
+
+on:
+  push:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: action/cache@v6
+        with:
+          key: uv
+          path: .venv
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          python-version: 3.14
+          cache-python: "true"
+
+      - name: Ruff format
+        run: |
+          uv tool run ruff format --diff 2>format.stderr.txt 1> format.stdout.txt
+          echo "# Ruff Format Output" >> $GITHUB_STEP_SUMMARY
+          cat format.stderr.txt >> $GITHUB_STEP_SUMMARY
+          cat format.stdout.txt >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Ruff lint
+        run: |
+          uv tool run ruff check 2>check.stderr.txt 1> check.stdout.txt
+          echo "# Ruff Lint Output" >> $GITHUB_STEP_SUMMARY
+          cat check.stderr.txt >> $GITHUB_STEP_SUMMARY
+          cat check.stdout.txt >> $GITHUB_STEP_SUMMARY
