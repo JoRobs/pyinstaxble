@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 from io import BytesIO
 from math import ceil
@@ -10,6 +11,8 @@ from PIL import Image
 
 import pyinstaxble.led_patterns as LedPatterns
 from pyinstaxble.types import EventType, InfoType, PrinterSettings
+
+logger = logging.getLogger(__name__)
 
 
 class InstaxBLE:
@@ -80,8 +83,8 @@ class InstaxBLE:
 
     def log(self, msg):
         """Print a debug message"""
-        if self.verbose:
-            print(msg)
+        if not self.quiet:
+            logger.info(msg)
 
     def display_current_status(self):
         """Display an overview of the current printer state"""
