@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 
 # Not sure yet where these fit in, but they are used in the original code
@@ -16,37 +17,42 @@ from enum import Enum
 Imgproc_COLOR_RGB2YUV_YV12 = 131
 Imgproc_COLOR_BGR2YUV_YV12 = 132
 
-PrinterSettings = {
-    "mini": {
-        "modelName": "Instax Mini Link",
-        "chunkSize": 900,
-        "exampleImage": "../resources/example-mini.jpg",
-        "width": 600,
-        "height": 800,
-    },
-    "square": {
-        "modelName": "Instax Square Link",
-        "chunkSize": 1808,
-        "exampleImage": "../resources/example-square.jpg",
-        "width": 800,
-        "height": 800,
-    },
-    "wide": {
-        "modelName": "Instax Wide Link",
-        "chunkSize": 900,
-        "exampleImage": "../resources/example-wide.jpg",
-        "width": 1260,
-        "height": 840,
-    },
-    "dummy": {
-        "modelName": "Dummy Printer",
-        "chunkSize": 123,
-        "exampleImage": "../resources/example-mini.jpg",
-        "width": 10,
-        "height": 20,
-    },
-}
+@dataclass
+class PrinterSettingsData:
+    """Printer model parameters"""
 
+    model_name: int
+    chunk_size: int
+    width: int
+    height: int
+
+class PrinterSettings(PrinterSettingsData, Enum):
+    """Supported printer models"""
+
+    MINI = PrinterSettingsData(
+        model_name= "Instax Mini Link",
+        chunk_size= 900,
+        width= 600,
+        height= 800,
+    )
+    SQUARE = PrinterSettingsData(
+        model_name= "Instax Square Link",
+        chunk_size= 1808,
+        width= 800,
+        height= 800,
+    )
+    WIDE = PrinterSettingsData(
+        model_name= "Instax Wide Link",
+        chunk_size= 900,
+        width=1260,
+        height=840,
+    )
+    DUMMY = PrinterSettingsData(
+        model_name= "Dummy Printer",
+        chunk_size= 123,
+        width= 10,
+        height= 20,
+    )
 
 class EventType(Enum):
     """Events we can send to the printer"""
