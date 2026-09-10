@@ -8,7 +8,6 @@ from time import sleep
 
 import anyio
 from bleak import BleakScanner, BleakClient, BLEDevice
-import simplepyble
 from PIL import Image
 
 import pyinstaxble.led_patterns as LedPatterns
@@ -560,7 +559,7 @@ def main(args=None):
     """Example usage of the InstaxBLE class"""
     if args is None:
         args = {}
-    instax = InstaxBLE(**args)
+    instax = InstaxBLEAK(**args)
     try:
         # To prevent misprints during development this script sends all the
         # image data except the final 'go print' command. To enable printing
