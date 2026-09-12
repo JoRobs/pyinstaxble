@@ -83,6 +83,7 @@ class InstaxBLEAK:
             print(f"MTU:                 {self.peripheral.mtu()}")
         print()
 
+    # TODO: Update to bleak
     def parse_printer_response(self, event, packet):
         """Parse the response packet and print the result"""
         # self.log(f"event: {event}")
@@ -147,6 +148,7 @@ class InstaxBLEAK:
         else:
             self.log(f"Uncaught response from printer. Eventype: {event}")
 
+    # TODO: Update to bleak
     def handle_image_packet_queue(self):
         if len(self.packets_for_printing) > 0 and not self.cancelled:
             if len(self.packets_for_printing) % 10 == 0:
@@ -156,6 +158,7 @@ class InstaxBLEAK:
             packet = self.packets_for_printing.pop(0)
             self.send_packet(packet)
 
+    # TODO: Update to bleak
     def notification_handler(self, packet):
         """Gets called whenever the printer replies and handles parsing the received data"""
         # self.log('Notification handler:')
@@ -250,6 +253,7 @@ class InstaxBLEAK:
             self.display_current_status()
 
 
+    # TODO: Update to bleak
     def disconnect(self):
         """Disconnect from the printer (if connected)"""
         if self.dummyPrinter:
@@ -262,6 +266,7 @@ class InstaxBLEAK:
             self.peripheral.disconnect()
             self.log("Disconnected")
 
+    # TODO: Update to bleak
     def cancel_print(self):
         self.packets_for_printing = []
         self.waitingForResponse = False
@@ -286,6 +291,7 @@ class InstaxBLEAK:
             payload += pack("BBB", color[0], color[1], color[2])
         return payload
 
+    # TODO: Update to bleak
     def send_led_pattern(self, pattern, speed=5, repeat=255, when=0):
         """Send a LED pattern to the Instax printer.
         colorArray: array of BGR(!) values to use in animation, e.g. [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
@@ -322,6 +328,7 @@ class InstaxBLEAK:
         """Validate the checksum of a packet."""
         return (sum(packet) & 255) == 255
 
+    # TODO: Update to bleak
     def send_packet(self, packet):
         """Send a packet to the printer"""
         if not self.dummyPrinter and not self.quiet:
@@ -371,6 +378,7 @@ class InstaxBLEAK:
             self.disconnect()
             sys.exit("Cancelled")
 
+    # TODO: Update to bleak
     def print_image(self, imgSrc):
         """
         print an image. Either pass a path to an image (as a string) or pass
@@ -449,6 +457,7 @@ class InstaxBLEAK:
             #     self.disconnect()
             #     sys.exit('Cancelled')
 
+    # TODO: Update to bleak
     def print_services(self):
         """Get and display and overview of the printer's services and characteristics"""
         self.log("Successfully connected, listing services...")
@@ -470,6 +479,7 @@ class InstaxBLEAK:
         packet = self.create_packet(EventType.XYZ_AXIS_INFO)
         self.send_packet(packet)
 
+    # TODO: Combine with get  printer info
     def get_printer_status(self):
         """Get the printer's status"""
         packet = self.create_packet(
@@ -548,6 +558,7 @@ class InstaxBLEAK:
 
         return bytearray(img_buffer.getvalue())
 
+    # TODO: Update to bleak
     def wait_one_minute(self):
         """Wait for one minute. Hacky way of preventing disconnecting too soon"""
         if not self.quiet:
@@ -555,6 +566,7 @@ class InstaxBLEAK:
         sleep(60)
 
 
+# TODO: Update to bleak
 def main(args=None):
     """Example usage of the InstaxBLE class"""
     if args is None:
