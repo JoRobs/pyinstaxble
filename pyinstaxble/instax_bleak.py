@@ -4,10 +4,10 @@ import sys
 from io import BytesIO
 from math import ceil
 from struct import pack, unpack_from
-from time import sleep
 from uuid import UUID
 
-import anyio
+from anyio import sleep as asleep
+from anyio import run
 from bleak import BleakScanner, BleakClient, BLEDevice
 from PIL import Image
 
@@ -318,7 +318,7 @@ class InstaxBLEAK:
                 self.waitingForResponse
                 and not self.cancelled
             ):
-                sleep(0.05)
+                await asleep(0.05)
 
             _header, _length, op1, op2 = unpack_from(">HHBB", packet)
             try:
@@ -520,15 +520,9 @@ class InstaxBLEAK:
 
         return bytearray(img_buffer.getvalue())
 
-    # TODO: Update to bleak
-    def wait_one_minute(self):
-        """Wait for one minute. Hacky way of preventing disconnecting too soon"""
-        logger.info("Waiting for one minute...")
-        sleep(60)
-
 
 # TODO: Update to bleak
-def main(args=None):
+async def main(args=None):
     """Example usage of the InstaxBLE class"""
     if args is None:
         args = {}
@@ -557,13 +551,13 @@ def main(args=None):
             instax.print_image(instax.image_path)
         else:
             instax.print_image(instax.printerSettings["exampleImage"])
-        instax.wait_one_minute()
+        asleep(60)
 
     except Exception as e:
-        print(type(e).__name__, __file__, e.__traceback__.tb_lineno)
+        logger.info(type(e).__name__, __file__, e.__traceback__.tb_lineno)
         instax.log(f"Error: {e}")
     finally:
-        print("finally, disconnect")
+        logger.info("Finally, disconnect")
         instax.disconnect()  # all done, disconnect
 
 
@@ -578,4 +572,4 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--image-path", help="Path to the image file")
     args = parser.parse_args()
 
-    main(vars(args))
+    run(main(vars(args)))
