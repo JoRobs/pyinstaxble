@@ -10,7 +10,7 @@ import simplepyble
 from PIL import Image
 
 import pyinstaxble.led_patterns as LedPatterns
-from pyinstaxble.types import EventType, InfoType, PrinterSettings
+from pyinstaxble.instax_types import EventType, InfoType, PrinterSettings
 
 logger = logging.getLogger(__name__)
 

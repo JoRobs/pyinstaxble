@@ -21,7 +21,7 @@ Imgproc_COLOR_BGR2YUV_YV12 = 132
 class PrinterSettingsData:
     """Printer model parameters"""
 
-    model_name: int
+    model_name: str
     chunk_size: int
     width: int
     height: int
@@ -29,30 +29,14 @@ class PrinterSettingsData:
 class PrinterSettings(PrinterSettingsData, Enum):
     """Supported printer models"""
 
-    MINI = PrinterSettingsData(
-        model_name= "Instax Mini Link",
-        chunk_size= 900,
-        width= 600,
-        height= 800,
-    )
-    SQUARE = PrinterSettingsData(
-        model_name= "Instax Square Link",
-        chunk_size= 1808,
-        width= 800,
-        height= 800,
-    )
-    WIDE = PrinterSettingsData(
-        model_name= "Instax Wide Link",
-        chunk_size= 900,
-        width=1260,
-        height=840,
-    )
-    DUMMY = PrinterSettingsData(
-        model_name= "Dummy Printer",
-        chunk_size= 123,
-        width= 10,
-        height= 20,
-    )
+    MINI = "Instax Mini Link", 900, 600, 800,
+
+    SQUARE = "Instax Square Link", 1808, 800, 800,
+
+    WIDE = "Instax Wide Link", 900, 1260, 840,
+
+    DUMMY = "Dummy Printer", 123, 10, 20,
+
 
 class EventType(Enum):
     """Events we can send to the printer"""

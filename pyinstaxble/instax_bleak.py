@@ -11,7 +11,7 @@ from bleak import BleakScanner, BleakClient, BLEDevice
 from PIL import Image
 
 import pyinstaxble.led_patterns as LedPatterns
-from pyinstaxble.types import EventType, InfoType, PrinterSettingsData, PrinterSettings
+from pyinstaxble.instax_types import EventType, InfoType, PrinterSettingsData, PrinterSettings
 
 logger = logging.getLogger(__name__)
 
