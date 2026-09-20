@@ -65,10 +65,6 @@ class InstaxBLEAK:
 
         logger.debug(f"Device {device.name} detected BLE advertisement {data.local_name}")
 
-    def log(self, msg):
-        """Print a debug message"""
-        logger.info(msg)
-
     def display_current_status(self):
         """Display an overview of the current printer state"""
         print("\nPrinter details: ")
@@ -87,7 +83,6 @@ class InstaxBLEAK:
     # TODO: Update to bleak
     def parse_printer_response(self, event, packet):
         """Parse the response packet and print the result"""
-        # self.log(f"event: {event}")
         self.waitingForResponse = False
 
         if event == EventType.XYZ_AXIS_INFO:
@@ -99,13 +94,11 @@ class InstaxBLEAK:
             try:
                 infoType = InfoType(packet[7])
             except ValueError:
-                self.log(f"Unknown InfoType: {packet[7]}")
+                logger.info(f"Unknown InfoType: {packet[7]}")
                 return
 
             if infoType == InfoType.IMAGE_SUPPORT_INFO:
                 w, h = unpack_from(">HH", packet[8:12])
-                # self.log(self.prettify_bytearray(packet[8:12]))
-                # self.log(f'image size: {w}x{h}')
                 self.image_size = (w, h)
                 if (w, h) == (600, 800):
                     self.printer_settings = PrinterSettings["mini"]
@@ -122,16 +115,10 @@ class InstaxBLEAK:
                 self.battery_state, self.battery_percentage = unpack_from(
                     ">BB", packet[8:10]
                 )
-                # self.log(f'battery state: {self.batteryState}, battery percentage: {self.batteryPercentage}')
             elif infoType == InfoType.PRINTER_FUNCTION_INFO:
                 dataByte = packet[8]
                 self.photos_left = dataByte & 15
                 self.is_charging = (1 << 7) & dataByte >= 1
-                # self.log(f'photos left: {self.photosLeft}')
-                # if self.isCharging:
-                #     self.log('Printer is charging')
-                # else:
-                #     self.log('Printer is running on battery')
 
         elif (
             event == EventType.PRINT_IMAGE_DOWNLOAD_START
@@ -144,16 +131,16 @@ class InstaxBLEAK:
             pass
 
         elif event == EventType.PRINT_IMAGE:
-            self.log("received print confirmation")
+            logger.info("received print confirmation")
 
         else:
-            self.log(f"Uncaught response from printer. Eventype: {event}")
+            logger.info(f"Uncaught response from printer. Eventype: {event}")
 
     # TODO: Update to bleak
     async def handle_image_packet_queue(self):
         if len(self.packets_for_printing) > 0 and not self.cancelled:
             if len(self.packets_for_printing) % 10 == 0:
-                self.log(
+                logger.info(
                     f"Img packets left to send: {len(self.packets_for_printing)}"
                 )
             packet = self.packets_for_printing.pop(0)
@@ -165,25 +152,24 @@ class InstaxBLEAK:
         logger.debug(f"Bytes: {packet}")
 
         if len(packet) < 8:
-            self.log(
+            logger.info(
                 f"\tError: response packet size should be >= 8 (was {len(packet)})!"
             )
             return
         elif not self.validate_checksum(packet):
-            self.log("\tResponse packet checksum was invalid!")
+            logger.info("\tResponse packet checksum was invalid!")
             return
 
         _header, _length, op1, op2 = unpack_from(">HHBB", packet)
-        # self.log('\theader: ', header, '\t', self.prettify_bytearray(packet[0:2]))
-        # self.log('\tlength: ', length, '\t', self.prettify_bytearray(packet[2:4]))
-        # self.log('\top1: ', op1, '\t\t', self.prettify_bytearray(packet[4:5]))
-        # self.log('\top2: ', op2, '\t\t', self.prettify_bytearray(packet[5:6]))
+        # logger.info('\theader: ', header, '\t', self.prettify_bytearray(packet[0:2]))
+        # logger.info('\tlength: ', length, '\t', self.prettify_bytearray(packet[2:4]))
+        # logger.info('\top1: ', op1, '\t\t', self.prettify_bytearray(packet[4:5]))
+        # logger.info('\top2: ', op2, '\t\t', self.prettify_bytearray(packet[5:6]))
 
         try:
             event = EventType((op1, op2))
-            # self.log(f'\tResponse event: {event}')
         except ValueError:
-            self.log(f"Unknown EventType: ({op1}, {op2})")
+            logger.info(f"Unknown EventType: ({op1}, {op2})")
             return
 
         self.parse_printer_response(event, packet)
@@ -252,11 +238,11 @@ class InstaxBLEAK:
             return
         if self.peripheral and self.peripheral.is_connected():
             # if len(self.packetsForPrinting) > 0 and not self.cancelled:
-            #     self.log('sending cancel command')
+            #     logger.info('sending cancel command')
             #     await self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
-            self.log("Disconnecting...")
+            logger.info("Disconnecting...")
             self.peripheral.disconnect()
-            self.log("Disconnected")
+            logger.info("Disconnected")
 
     # TODO: Update to bleak
     async def cancel_print(self):
@@ -332,7 +318,6 @@ class InstaxBLEAK:
                 self.waitingForResponse
                 and not self.cancelled
             ):
-                # self.log("sleep")
                 sleep(0.05)
 
             _header, _length, op1, op2 = unpack_from(">HHBB", packet)
@@ -344,9 +329,9 @@ class InstaxBLEAK:
             self.waitingForResponse = True
             smallPacketSize = 182
             numberOfParts = ceil(len(packet) / smallPacketSize)
-            # self.log(f"> number of parts to send: {numberOfParts}")
+            # logger.info(f"> number of parts to send: {numberOfParts}")
             for subPartIndex in range(numberOfParts):
-                # self.log((subPartIndex + 1), '/', numberOfParts)
+                # logger.info((subPartIndex + 1), '/', numberOfParts)
                 subPacket = packet[
                     subPartIndex * smallPacketSize : subPartIndex
                     * smallPacketSize
@@ -368,9 +353,9 @@ class InstaxBLEAK:
         print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
         """
-        self.log(f'printing image "{imgSrc}"')
+        logger.info(f'printing image "{imgSrc}"')
         if self.photos_left == 0 and not self.dummyPrinter:
-            self.log("Can't print: no photos left")
+            logger.info("Can't print: no photos left")
             return
 
         imgData = imgSrc
@@ -382,7 +367,7 @@ class InstaxBLEAK:
             image = Image.open(imgSrc)
             imgData = self.pil_image_to_bytes(image, max_size_kb=105)
 
-        # self.log(f"len of imagedata: {len(imgData)}")
+        # logger.info(f"len of imagedata: {len(imgData)}")
         self.packets_for_printing = [
             # \x02\x00\x00\x00 payload made of four bytes: pictureType, picturePrintOption, picturePrintOption2, zero
             self.create_packet(
@@ -422,12 +407,12 @@ class InstaxBLEAK:
             )
             self.packets_for_printing.append(self.create_packet((0, 2), b"\x02"))
         else:
-            self.log(
+            logger.info(
                 "Printing is disabled, sending all packets except the actual print command"
             )
 
         # for packet in self.packetsForPrinting:
-        #     self.log(self.prettify_bytearray(packet))
+        #     logger.info(self.prettify_bytearray(packet))
         # exit()
         # send the first packet from our list, the packet handler will take care of the rest
         if not self.dummyPrinter:
@@ -444,7 +429,7 @@ class InstaxBLEAK:
     # TODO: Update to bleak
     def print_services(self):
         """Get and display and overview of the printer's services and characteristics"""
-        self.log("Successfully connected, listing services...")
+        logger.info("Successfully connected, listing services...")
         services = self.peripheral.services()
         service_characteristic_pair = []
         for service in services:
@@ -456,7 +441,7 @@ class InstaxBLEAK:
         for i, (service_uuid, characteristic) in enumerate(
             service_characteristic_pair
         ):
-            self.log(f"{i}: {service_uuid} {characteristic}")
+            logger.info(f"{i}: {service_uuid} {characteristic}")
 
     async def get_printer_orientation(self):
         """Get the current XYZ orientation of the printer"""
@@ -465,7 +450,6 @@ class InstaxBLEAK:
 
     async def get_printer_info(self):
         """Get and display the printer's status and info, like photos left and battery level"""
-        # self.log("Getting function info...")
 
         packet = self.create_packet(
             EventType.SUPPORT_FUNCTION_INFO,
@@ -512,7 +496,7 @@ class InstaxBLEAK:
 
             while low_quality <= high_quality:
                 output_size_kb = save_img_with_quality(current_quality)
-                # self.log(f"current output quality: {current_quality}, current size: {output_size_kb}")
+                # logger.info(f"current output quality: {current_quality}, current size: {output_size_kb}")
 
                 if (
                     output_size_kb <= max_size_kb
@@ -531,7 +515,7 @@ class InstaxBLEAK:
 
             # Save the image with the closest_quality
             save_img_with_quality(closest_quality)
-            self.log(f"Saved img with quality of {closest_quality}")
+            logger.info(f"Saved img with quality of {closest_quality}")
         else:
             img.save(img_buffer, format="JPEG")
 
@@ -540,7 +524,7 @@ class InstaxBLEAK:
     # TODO: Update to bleak
     def wait_one_minute(self):
         """Wait for one minute. Hacky way of preventing disconnecting too soon"""
-        self.log("Waiting for one minute...")
+        logger.info("Waiting for one minute...")
         sleep(60)
 
 
