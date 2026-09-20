@@ -56,9 +56,13 @@ class InstaxBLEAK:
         self.photos_left = 0
         self.is_charging = False
         self.image_size = (printer_settings.width, printer_settings.height)
-        self.waitingForResponse = False
         self.cancelled = False
         self.scanner = BleakScanner(self.detection_callback)
+
+        self.awaiting_response = False
+        self.awaiting_info_battery = False
+        self.awaiting_info_image = False
+        self.awaiting_info_printfunc = False
 
     def detection_callback(self, device, data)->None:
         if not data.local_name and device.name:
@@ -66,6 +70,30 @@ class InstaxBLEAK:
             return
 
         logger.debug(f"Device {device.name} detected BLE advertisement {data.local_name}")
+
+    async def get_printer_info(self, timeout=5):
+        """Get and display the printer's status and info, like photos left and battery level"""
+
+        packet = self.create_packet(
+            EventType.SUPPORT_FUNCTION_INFO,
+            pack(">B", InfoType.IMAGE_SUPPORT_INFO.value),
+        )
+        self.awaiting_info_image = True
+        await self.send_packet(packet)
+
+        packet = self.create_packet(
+            EventType.SUPPORT_FUNCTION_INFO,
+            pack(">B", InfoType.BATTERY_INFO.value),
+        )
+        self.awaiting_info_battery = True
+        await self.send_packet(packet)
+
+        packet = self.create_packet(
+            EventType.SUPPORT_FUNCTION_INFO,
+            pack(">B", InfoType.PRINTER_FUNCTION_INFO.value),
+        )
+        self.awaiting_info_printfunc = True
+        await self.send_packet(packet)
 
     def display_current_status(self):
         """Display an overview of the current printer state"""
@@ -80,10 +108,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         """
         logger.info(status_string)
 
-    # TODO: Update to bleak
     def parse_printer_response(self, event, packet):
         """Parse the response packet and print the result"""
-        self.waitingForResponse = False
+        self.awaiting_response = False
+        logger.info(f"Parsing printer info: event: {event}, packet: {packet}")
 
         if event == EventType.XYZ_AXIS_INFO:
             x, y, z, o = unpack_from("<hhhB", packet[6:-1])
@@ -96,6 +124,8 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             except ValueError:
                 logger.info(f"Unknown InfoType: {packet[7]}")
                 return
+
+            logger.info(f"Info type: {infoType}")
 
             if infoType == InfoType.IMAGE_SUPPORT_INFO:
                 w, h = unpack_from(">HH", packet[8:12])
@@ -110,15 +140,19 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                     sys.exit(f"Unknown image size from printer: {w}x{h}")
 
                 self.chunk_size = self.printer_settings.chunk_size
+                self.awaiting_info_image = False
 
             elif infoType == InfoType.BATTERY_INFO:
                 self.battery_state, self.battery_percentage = unpack_from(
                     ">BB", packet[8:10]
                 )
+                self.awaiting_info_battery = False
+
             elif infoType == InfoType.PRINTER_FUNCTION_INFO:
                 dataByte = packet[8]
                 self.photos_left = dataByte & 15
                 self.is_charging = (1 << 7) & dataByte >= 1
+                self.awaiting_info_printfunc = False
 
         elif (
             event == EventType.PRINT_IMAGE_DOWNLOAD_START
@@ -226,6 +260,14 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 return
 
             await self.get_printer_info()
+            while (
+                (self.awaiting_info_battery
+                or self.awaiting_info_image
+                or self.awaiting_info_printfunc)
+                and not self.cancelled
+            ):
+                await asleep(0.05)
+
             self.display_current_status()
 
         else:
@@ -248,7 +290,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
     # TODO: Update to bleak
     async def cancel_print(self):
         self.packets_for_printing = []
-        self.waitingForResponse = False
+        self.awaiting_response = False
         await self.send_packet(
             self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
         )
@@ -309,17 +351,18 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
     async def send_packet(self, packet):
         """Send a packet to the printer"""
+        logger.info(f"Start sending packet: {packet}")
+        logger.info("Waiting for other packets")
 
         if not self.client:
             logger.error("No connected device, run connect first.")
             return
 
+        while (self.awaiting_response and not self.cancelled):
+            await asleep(0.05)
+
         try:
-            while (
-                self.waitingForResponse
-                and not self.cancelled
-            ):
-                await asleep(0.05)
+            logger.info("Finished waiting")
 
             _header, _length, op1, op2 = unpack_from(">HHBB", packet)
             try:
@@ -327,19 +370,19 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             except Exception as e:
                 logger.error(e.with_traceback())
 
-            self.waitingForResponse = True
+            self.awaiting_response = True
             smallPacketSize = 182
             numberOfParts = ceil(len(packet) / smallPacketSize)
-            # logger.info(f"> number of parts to send: {numberOfParts}")
+            logger.info(f"> number of parts to send: {numberOfParts}")
             for subPartIndex in range(numberOfParts):
-                # logger.info((subPartIndex + 1), '/', numberOfParts)
+                logger.info(f"{subPartIndex + 1}/{numberOfParts}")
                 subPacket = packet[
                     subPartIndex * smallPacketSize : subPartIndex
                     * smallPacketSize
                     + smallPacketSize
                 ]
 
-                await self.client.write_gatt_char(WRITECHAR_UUID, subPacket)
+                await self.client.write_gatt_char(WRITECHAR_UUID, subPacket, response=True)
 
         except KeyboardInterrupt:
             self.cancelled = True
@@ -447,27 +490,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
     async def get_printer_orientation(self):
         """Get the current XYZ orientation of the printer"""
         packet = self.create_packet(EventType.XYZ_AXIS_INFO)
-        await self.send_packet(packet)
-
-    async def get_printer_info(self):
-        """Get and display the printer's status and info, like photos left and battery level"""
-
-        packet = self.create_packet(
-            EventType.SUPPORT_FUNCTION_INFO,
-            pack(">B", InfoType.IMAGE_SUPPORT_INFO.value),
-        )
-        await self.send_packet(packet)
-
-        packet = self.create_packet(
-            EventType.SUPPORT_FUNCTION_INFO,
-            pack(">B", InfoType.BATTERY_INFO.value),
-        )
-        await self.send_packet(packet)
-
-        packet = self.create_packet(
-            EventType.SUPPORT_FUNCTION_INFO,
-            pack(">B", InfoType.PRINTER_FUNCTION_INFO.value),
-        )
         await self.send_packet(packet)
 
     def pil_image_to_bytes(
