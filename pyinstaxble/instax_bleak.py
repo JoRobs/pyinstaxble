@@ -8,7 +8,7 @@ from uuid import UUID
 
 from anyio import sleep as asleep
 from anyio import run
-from bleak import BleakScanner, BleakClient, BLEDevice
+from bleak import BleakScanner, BleakClient, BLEDevice, AdvertisementData
 from PIL import Image
 
 import pyinstaxble.led_patterns as LedPatterns
@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 SERVICE_UUID = UUID("70954782-2d83-473d-9e5f-81e1d02d5273")
 WRITECHAR_UUID = UUID("70954783-2d83-473d-9e5f-81e1d02d5273")
 NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
+INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
+INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData
@@ -67,18 +69,16 @@ class InstaxBLEAK:
 
     def display_current_status(self):
         """Display an overview of the current printer state"""
-        print("\nPrinter details: ")
-        # print(f"Device name:         {self.printer_settings['modelName']}")
-        print(f"Model:               {self.printer_settings['modelName']}")
-        print(f"Photos left:         {self.photos_left}/10")
-        print(f"Battery level:       {self.battery_percentage}%")
-        print(f"Charging:            {self.is_charging}")
-        print(
-            f"Required image size: {self.printer_settings['width']}x{self.printer_settings['height']}px"
-        )
-        if self.peripheral.mtu:
-            print(f"MTU:                 {self.peripheral.mtu()}")
-        print()
+
+        status_string = f"""
+Printer details:
+Model:               {self.printer_settings.model_name}
+Photos left:         {self.photos_left}/10
+Battery level:       {self.battery_percentage}%
+Charging:            {self.is_charging}
+Required image size: {self.printer_settings.width}px, {self.printer_settings.height}px
+        """
+        logger.info(status_string)
 
     # TODO: Update to bleak
     def parse_printer_response(self, event, packet):
@@ -101,15 +101,15 @@ class InstaxBLEAK:
                 w, h = unpack_from(">HH", packet[8:12])
                 self.image_size = (w, h)
                 if (w, h) == (600, 800):
-                    self.printer_settings = PrinterSettings["mini"]
+                    self.printer_settings = PrinterSettings.MINI
                 elif (w, h) == (800, 800):
-                    self.printer_settings = PrinterSettings["square"]
+                    self.printer_settings = PrinterSettings.SQUARE
                 elif (w, h) == (1260, 840):
-                    self.printer_settings = PrinterSettings["wide"]
+                    self.printer_settings = PrinterSettings.WIDE
                 else:
                     sys.exit(f"Unknown image size from printer: {w}x{h}")
 
-                self.chunk_size = self.printer_settings["chunkSize"]
+                self.chunk_size = self.printer_settings.chunk_size
 
             elif infoType == InfoType.BATTERY_INFO:
                 self.battery_state, self.battery_percentage = unpack_from(
@@ -175,33 +175,32 @@ class InstaxBLEAK:
         self.parse_printer_response(event, packet)
 
     async def find_device(self, timeout=5) -> BLEDevice | None:
-            """ " Scan for our device and return it when found"""
-            logger.debug("Searching for instax printer...")
+        """ " Scan for our device and return it when found"""
+        logger.debug("Searching for instax printer...")
 
-            try:
-                devices: list[BLEDevice] = await self.scanner.discover(timeout)
-                for device in devices:
+        def device_filter(device: BLEDevice, data: AdvertisementData):
+            """Filter scanned devices for instax printer"""
+            logger.info(f"Device: {device}, Adver: {data}")
 
-                    if (self.device_name
-                        and device.name
-                        and device.name.startswith(self.device_name)):
-                        return device
+            if self.device_address:
+                return self.device_address == device.address
 
-                    if (self.device_address
-                        and device.address
-                        and device.address.startswith(self.device_address)):
-                        return device
+            if self.device_name:
+                return self.device_name == device.name
+                return self.device_name == data.local_name
+            if device.name:
+                return \
+                    device.name.startswith(INSTAX_DEVICE_NAME_PREFIX) \
+                    and device.name.endswith(INSTAX_DEVICE_NAME_SUFFIX)
+            return False
 
-                    if (device.name
-                        and device.name.startswith("INSTAX-")
-                        and device.name.endswith("(BLE)")):
-                        return device
-
-                logger.debug("No devices found")
-                return None
-
-            except Exception as e:
-                logger.error(e)
+        try:
+            device = await self.scanner.find_device_by_filter(device_filter, timeout)
+            if device:
+                return device
+            logger.info("No devices found during scan")
+        except Exception as e:
+            logger.error(e)
 
     async def connect(self, timeout=5):
         """Connect to the printer. Stops trying after the timeout."""
@@ -227,6 +226,8 @@ class InstaxBLEAK:
                 return
 
             await self.get_printer_info()
+            self.display_current_status()
+
         else:
             logger.debug("No connectable device found.")
 
@@ -550,7 +551,8 @@ async def main(args=None):
         if instax.image_path:
             instax.print_image(instax.image_path)
         else:
-            instax.print_image(instax.printerSettings["exampleImage"])
+            logger.info("No image provided")
+            pass
         asleep(60)
 
     except Exception as e:
