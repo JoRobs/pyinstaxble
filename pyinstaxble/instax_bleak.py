@@ -496,7 +496,6 @@ class InstaxBLEAK:
 
             while low_quality <= high_quality:
                 output_size_kb = save_img_with_quality(current_quality)
-                # logger.info(f"current output quality: {current_quality}, current size: {output_size_kb}")
 
                 if (
                     output_size_kb <= max_size_kb
