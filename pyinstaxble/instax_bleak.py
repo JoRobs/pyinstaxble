@@ -315,7 +315,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             payload += pack("BBB", color[0], color[1], color[2])
         return payload
 
-    # TODO: Update to bleak
     async def send_led_pattern(self, pattern, speed=5, repeat=255, when=0):
         """Send a LED pattern to the Instax printer.
         colorArray: array of BGR(!) values to use in animation, e.g. [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
@@ -473,11 +472,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             #     self.disconnect()
             #     sys.exit('Cancelled')
 
-    # TODO: Update to bleak
     def print_services(self):
-        """Get and display and overview of the printer's services and characteristics"""
-        logger.info("Successfully connected, listing services...")
-        services = self.peripheral.services()
+        """Display and overview of the printer's services and characteristics"""
+        services = self.client.services
         service_characteristic_pair = []
         for service in services:
             for characteristic in service.characteristics():
@@ -545,58 +542,3 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             img.save(img_buffer, format="JPEG")
 
         return bytearray(img_buffer.getvalue())
-
-
-# TODO: Update to bleak
-async def main(args=None):
-    """Example usage of the InstaxBLE class"""
-    if args is None:
-        args = {}
-    instax = InstaxBLEAK(**args)
-    try:
-        # To prevent misprints during development this script sends all the
-        # image data except the final 'go print' command. To enable printing
-        # uncomment the next line, or pass --print-enabled when calling
-        # this script
-
-        # instax.enable_printing()
-        instax.connect()
-        # Set a rainbow effect to be shown while printing and a pulsating
-        # green effect when printing is done
-        instax.send_led_pattern(LedPatterns.rainbow, when=1)
-        instax.send_led_pattern(LedPatterns.pulseGreen, when=2)
-        # you can also read the current accelerometer values if you want
-        # while True:
-        #     instax.get_printer_orientation()
-        #     sleep(.5)
-
-        # send your image (.jpg) to the printer by
-        # passing the image_path as an argument when calling
-        # this script, or by specifying the path in your code
-        if instax.image_path:
-            instax.print_image(instax.image_path)
-        else:
-            logger.error("No image provided")
-            pass
-        asleep(60)
-
-    except Exception as e:
-        logger.error(type(e).__name__, __file__, e.__traceback__.tb_lineno)
-        instax.log(f"Error: {e}")
-    finally:
-        logger.info("Finally, disconnect")
-        instax.disconnect()  # all done, disconnect
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--device-address")
-    parser.add_argument("-n", "--device-name")
-    parser.add_argument("-p", "--print-enabled", action="store_true")
-    parser.add_argument("-d", "--dummy-printer", action="store_true")
-    parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-q", "--quiet", action="store_true")
-    parser.add_argument("-i", "--image-path", help="Path to the image file")
-    args = parser.parse_args()
-
-    run(main(vars(args)))
