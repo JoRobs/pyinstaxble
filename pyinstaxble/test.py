@@ -1,11 +1,12 @@
-import bleak
 import logging
 
 from anyio import run
 
 from instax_bleak import InstaxBLEAK
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
+
+logging.getLogger("bleak").setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 

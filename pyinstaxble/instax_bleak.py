@@ -7,7 +7,7 @@ from struct import pack, unpack_from
 from uuid import UUID
 
 from anyio import sleep as asleep
-from anyio import run
+from anyio import run, move_on_after
 from bleak import BleakScanner, BleakClient, BLEDevice, AdvertisementData
 from PIL import Image
 
@@ -71,7 +71,7 @@ class InstaxBLEAK:
 
         logger.debug(f"Device {device.name} detected BLE advertisement {data.local_name}")
 
-    async def get_printer_info(self, timeout=5):
+    async def get_printer_info(self, timeout=5, poll_delay=0.05):
         """Get and display the printer's status and info, like photos left and battery level"""
 
         packet = self.create_packet(
@@ -95,6 +95,15 @@ class InstaxBLEAK:
         self.awaiting_info_printfunc = True
         await self.send_packet(packet)
 
+        with move_on_after(timeout):
+            while (
+                (self.awaiting_info_battery
+                or self.awaiting_info_image
+                or self.awaiting_info_printfunc)
+                and not self.cancelled
+            ):
+                await asleep(poll_delay)
+
     def display_current_status(self):
         """Display an overview of the current printer state"""
 
@@ -108,10 +117,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         """
         logger.info(status_string)
 
-    def parse_printer_response(self, event, packet):
+    async def parse_printer_response(self, event, packet):
         """Parse the response packet and print the result"""
         self.awaiting_response = False
-        logger.info(f"Parsing printer info: event: {event}, packet: {packet}")
+        logger.debug(f"Parsing printer info: event: {event}, packet: {packet}")
 
         if event == EventType.XYZ_AXIS_INFO:
             x, y, z, o = unpack_from("<hhhB", packet[6:-1])
@@ -122,10 +131,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             try:
                 infoType = InfoType(packet[7])
             except ValueError:
-                logger.info(f"Unknown InfoType: {packet[7]}")
+                logger.debug(f"Unknown InfoType: {packet[7]}")
                 return
 
-            logger.info(f"Info type: {infoType}")
+            logger.debug(f"Info type: {infoType}")
 
             if infoType == InfoType.IMAGE_SUPPORT_INFO:
                 w, h = unpack_from(">HH", packet[8:12])
@@ -159,22 +168,21 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             or event == EventType.PRINT_IMAGE_DOWNLOAD_DATA
             or event == EventType.PRINT_IMAGE_DOWNLOAD_END
         ):
-            self.handle_image_packet_queue()
+            await self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
             pass
 
         elif event == EventType.PRINT_IMAGE:
-            logger.info("received print confirmation")
+            logger.debug("received print confirmation")
 
         else:
-            logger.info(f"Uncaught response from printer. Eventype: {event}")
+            logger.error(f"Unknown response from printer. Eventype: {event}")
 
-    # TODO: Update to bleak
     async def handle_image_packet_queue(self):
         if len(self.packets_for_printing) > 0 and not self.cancelled:
             if len(self.packets_for_printing) % 10 == 0:
-                logger.info(
+                logger.debug(
                     f"Img packets left to send: {len(self.packets_for_printing)}"
                 )
             packet = self.packets_for_printing.pop(0)
@@ -186,12 +194,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         logger.debug(f"Bytes: {packet}")
 
         if len(packet) < 8:
-            logger.info(
+            logger.error(
                 f"\tError: response packet size should be >= 8 (was {len(packet)})!"
             )
             return
         elif not self.validate_checksum(packet):
-            logger.info("\tResponse packet checksum was invalid!")
+            logger.error("\tResponse packet checksum was invalid!")
             return
 
         _header, _length, op1, op2 = unpack_from(">HHBB", packet)
@@ -203,10 +211,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         try:
             event = EventType((op1, op2))
         except ValueError:
-            logger.info(f"Unknown EventType: ({op1}, {op2})")
+            logger.error(f"Unknown EventType: ({op1}, {op2})")
             return
 
-        self.parse_printer_response(event, packet)
+        await self.parse_printer_response(event, packet)
 
     async def find_device(self, timeout=5) -> BLEDevice | None:
         """ " Scan for our device and return it when found"""
@@ -214,7 +222,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         def device_filter(device: BLEDevice, data: AdvertisementData):
             """Filter scanned devices for instax printer"""
-            logger.info(f"Device: {device}, Adver: {data}")
 
             if self.device_address:
                 return self.device_address == device.address
@@ -232,7 +239,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             device = await self.scanner.find_device_by_filter(device_filter, timeout)
             if device:
                 return device
-            logger.info("No devices found during scan")
+            search_criteria = next(i for i in (
+                self.device_name,
+                self.device_address,
+                f"{INSTAX_DEVICE_NAME_PREFIX}______{INSTAX_DEVICE_NAME_SUFFIX}"
+                ) if i)
+            logger.error(f"Device {search_criteria} was not found during scan")
         except Exception as e:
             logger.error(e)
 
@@ -243,7 +255,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         if device:
             logger.info(f"Connecting to {device.name} [{device.address}]")
-
             self.client = BleakClient(device)
 
             try:
@@ -259,35 +270,27 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 logger.error(f"Error on attaching notification_handler: {e}")
                 return
 
-            await self.get_printer_info()
-            while (
-                (self.awaiting_info_battery
-                or self.awaiting_info_image
-                or self.awaiting_info_printfunc)
-                and not self.cancelled
-            ):
-                await asleep(0.05)
-
+            await self.get_printer_info(timeout)
             self.display_current_status()
 
         else:
             logger.debug("No connectable device found.")
 
 
-    # TODO: Update to bleak
-    def disconnect(self):
+    async def disconnect(self):
         """Disconnect from the printer (if connected)"""
-        if self.dummyPrinter:
-            return
-        if self.peripheral and self.peripheral.is_connected():
-            # if len(self.packetsForPrinting) > 0 and not self.cancelled:
-            #     logger.info('sending cancel command')
-            #     await self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
-            logger.info("Disconnecting...")
-            self.peripheral.disconnect()
-            logger.info("Disconnected")
 
-    # TODO: Update to bleak
+        if not self.client:
+            return
+
+        if len(self.packetsForPrinting) > 0 and not self.cancelled:
+            logger.info('sending cancel command')
+            await self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
+
+        logger.info("Disconnecting...")
+        await self.client.disconnect()
+        logger.info("Disconnected")
+
     async def cancel_print(self):
         self.packets_for_printing = []
         self.awaiting_response = False
@@ -351,8 +354,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
     async def send_packet(self, packet):
         """Send a packet to the printer"""
-        logger.info(f"Start sending packet: {packet}")
-        logger.info("Waiting for other packets")
+        logger.debug(f"Start sending packet: {packet}, will wait for other packets...")
 
         if not self.client:
             logger.error("No connected device, run connect first.")
@@ -362,7 +364,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             await asleep(0.05)
 
         try:
-            logger.info("Finished waiting")
+            logger.debug("Finished waiting")
 
             _header, _length, op1, op2 = unpack_from(">HHBB", packet)
             try:
@@ -373,9 +375,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             self.awaiting_response = True
             smallPacketSize = 182
             numberOfParts = ceil(len(packet) / smallPacketSize)
-            logger.info(f"> number of parts to send: {numberOfParts}")
+            logger.debug(f"> Number of parts to send: {numberOfParts}")
             for subPartIndex in range(numberOfParts):
-                logger.info(f"{subPartIndex + 1}/{numberOfParts}")
+                logger.debug(f"> Sending part {subPartIndex + 1}/{numberOfParts}")
                 subPacket = packet[
                     subPartIndex * smallPacketSize : subPartIndex
                     * smallPacketSize
@@ -397,9 +399,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
         """
-        logger.info(f'printing image "{imgSrc}"')
-        if self.photos_left == 0 and not self.dummyPrinter:
-            logger.info("Can't print: no photos left")
+        logger.info(f'Printing image "{imgSrc}"')
+
+        if self.photos_left == 0:
+            logger.error("Can't print: no photos left")
             return
 
         imgData = imgSrc
@@ -573,12 +576,12 @@ async def main(args=None):
         if instax.image_path:
             instax.print_image(instax.image_path)
         else:
-            logger.info("No image provided")
+            logger.error("No image provided")
             pass
         asleep(60)
 
     except Exception as e:
-        logger.info(type(e).__name__, __file__, e.__traceback__.tb_lineno)
+        logger.error(type(e).__name__, __file__, e.__traceback__.tb_lineno)
         instax.log(f"Error: {e}")
     finally:
         logger.info("Finally, disconnect")
