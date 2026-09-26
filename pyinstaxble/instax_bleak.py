@@ -317,7 +317,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         logger.info("Disconnected")
 
     async def cancel_print(self):
-        if self.packets_for_printing > 0:
+        if len(self.packets_for_printing) > 0:
             logger.info("Sending print cancel command")
             await self.send_packet(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
