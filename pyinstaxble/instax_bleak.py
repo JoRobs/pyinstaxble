@@ -1,4 +1,3 @@
-import argparse
 import logging
 import sys
 from io import BytesIO
@@ -6,17 +5,16 @@ from math import ceil
 from struct import pack, unpack_from
 from uuid import UUID
 
+from anyio import move_on_after
 from anyio import sleep as asleep
-from anyio import run, move_on_after
-from bleak import BleakScanner, BleakClient, BLEDevice, AdvertisementData
+from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from PIL import Image
 
-import pyinstaxble.led_patterns as LedPatterns
 from pyinstaxble.instax_types import (
     EventType,
     InfoType,
-    PrinterSettingsData,
     PrinterSettings,
+    PrinterSettingsData,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +28,7 @@ MAX_PACKET_SIZE = 182
 
 
 class InstaxBLEAK:
-    printer_settings: PrinterSettingsData
+    printer_settings: PrinterSettingsData | None
     device_address: str | None
     device_name: str | None
     print_enabled: bool
@@ -39,8 +37,8 @@ class InstaxBLEAK:
     def __init__(
         self,
         printer_settings: PrinterSettingsData | None = PrinterSettings.MINI,
-        device_address: str = None,
-        device_name: str = None,
+        device_address: str | None = None,
+        device_name: str | None = None,
         print_enabled: bool = False,
     ):
         """

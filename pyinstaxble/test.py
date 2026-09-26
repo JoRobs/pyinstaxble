@@ -1,7 +1,6 @@
 import logging
 
 from anyio import run, sleep
-
 from instax_bleak import InstaxBLEAK
 
 logging.basicConfig(level=logging.DEBUG)
