@@ -17,6 +17,7 @@ from enum import Enum
 Imgproc_COLOR_RGB2YUV_YV12 = 131
 Imgproc_COLOR_BGR2YUV_YV12 = 132
 
+
 @dataclass
 class PrinterSettingsData:
     """Printer model parameters"""
@@ -26,16 +27,37 @@ class PrinterSettingsData:
     width: int
     height: int
 
+
 class PrinterSettings(PrinterSettingsData, Enum):
     """Supported printer models"""
 
-    MINI = "Instax Mini Link", 900, 600, 800,
+    MINI = (
+        "Instax Mini Link",
+        900,
+        600,
+        800,
+    )
 
-    SQUARE = "Instax Square Link", 1808, 800, 800,
+    SQUARE = (
+        "Instax Square Link",
+        1808,
+        800,
+        800,
+    )
 
-    WIDE = "Instax Wide Link", 900, 1260, 840,
+    WIDE = (
+        "Instax Wide Link",
+        900,
+        1260,
+        840,
+    )
 
-    DUMMY = "Dummy Printer", 123, 10, 20,
+    DUMMY = (
+        "Dummy Printer",
+        123,
+        10,
+        20,
+    )
 
 
 class EventType(Enum):

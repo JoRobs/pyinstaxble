@@ -12,7 +12,12 @@ from bleak import BleakScanner, BleakClient, BLEDevice, AdvertisementData
 from PIL import Image
 
 import pyinstaxble.led_patterns as LedPatterns
-from pyinstaxble.instax_types import EventType, InfoType, PrinterSettingsData, PrinterSettings
+from pyinstaxble.instax_types import (
+    EventType,
+    InfoType,
+    PrinterSettingsData,
+    PrinterSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +28,7 @@ INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 182
 
+
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData
     device_address: str | None
@@ -32,10 +38,10 @@ class InstaxBLEAK:
 
     def __init__(
         self,
-        printer_settings:PrinterSettingsData | None=PrinterSettings.MINI,
-        device_address:str=None,
-        device_name:str=None,
-        print_enabled:bool=False,
+        printer_settings: PrinterSettingsData | None = PrinterSettings.MINI,
+        device_address: str = None,
+        device_name: str = None,
+        print_enabled: bool = False,
     ):
         """
         Initialize the InstaxBLE class.
@@ -49,7 +55,9 @@ class InstaxBLEAK:
         self.chunk_size: int = printer_settings.chunk_size
         self.print_enabled: bool = print_enabled
         self.device_name: str = device_name.upper() if device_name else None
-        self.device_address: str = device_address.upper() if device_address else None
+        self.device_address: str = (
+            device_address.upper() if device_address else None
+        )
         self.packets_for_printing: list = []
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
@@ -65,12 +73,16 @@ class InstaxBLEAK:
         self.awaiting_info_image = False
         self.awaiting_info_printfunc = False
 
-    def detection_callback(self, device, data)->None:
+    def detection_callback(self, device, data) -> None:
         if not data.local_name and device.name:
-            logger.debug("Detected BLE advertisement, but not enough data to log")
+            logger.debug(
+                "Detected BLE advertisement, but not enough data to log"
+            )
             return
 
-        logger.debug(f"Device {device.name} detected BLE advertisement {data.local_name}")
+        logger.debug(
+            f"Device {device.name} detected BLE advertisement {data.local_name}"
+        )
 
     async def get_printer_info(self, timeout=5, poll_delay=0.05):
         """Get and display the printer's status and info, like photos left and battery level"""
@@ -98,11 +110,10 @@ class InstaxBLEAK:
 
         with move_on_after(timeout):
             while (
-                (self.awaiting_info_battery
+                self.awaiting_info_battery
                 or self.awaiting_info_image
-                or self.awaiting_info_printfunc)
-                and not self.cancelled
-            ):
+                or self.awaiting_info_printfunc
+            ) and not self.cancelled:
                 await asleep(poll_delay)
 
     def display_current_status(self):
@@ -125,6 +136,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 return res
             finally:
                 self.awaiting_response = False
+
         return wrapper
 
     @unawait_response
@@ -198,7 +210,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             packet = self.packets_for_printing.pop(0)
             await self.send_packet(packet)
 
-    async def notification_handler(self, char_uuid, packet)->None:
+    async def notification_handler(self, char_uuid, packet) -> None:
         """Gets called whenever the printer replies and handles parsing the received data"""
         logger.debug(f"Char: {char_uuid}")
         logger.debug(f"Bytes: {packet}")
@@ -240,20 +252,26 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 return self.device_name == device.name
                 return self.device_name == data.local_name
             if device.name:
-                return \
-                    device.name.startswith(INSTAX_DEVICE_NAME_PREFIX) \
-                    and device.name.endswith(INSTAX_DEVICE_NAME_SUFFIX)
+                return device.name.startswith(
+                    INSTAX_DEVICE_NAME_PREFIX
+                ) and device.name.endswith(INSTAX_DEVICE_NAME_SUFFIX)
             return False
 
         try:
-            device = await self.scanner.find_device_by_filter(device_filter, timeout)
+            device = await self.scanner.find_device_by_filter(
+                device_filter, timeout
+            )
             if device:
                 return device
-            search_criteria = next(i for i in (
-                self.device_name,
-                self.device_address,
-                f"{INSTAX_DEVICE_NAME_PREFIX}______{INSTAX_DEVICE_NAME_SUFFIX}"
-                ) if i)
+            search_criteria = next(
+                i
+                for i in (
+                    self.device_name,
+                    self.device_address,
+                    f"{INSTAX_DEVICE_NAME_PREFIX}______{INSTAX_DEVICE_NAME_SUFFIX}",
+                )
+                if i
+            )
             logger.error(f"Device {search_criteria} was not found during scan")
         except Exception as e:
             logger.error(e)
@@ -275,7 +293,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.info("Connected")
 
             try:
-                await self.client.start_notify( 17, callback=self.notification_handler)
+                await self.client.start_notify(
+                    17, callback=self.notification_handler
+                )
             except Exception as e:
                 logger.error(f"Error on attaching notification_handler: {e}")
                 return
@@ -286,7 +306,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         else:
             logger.debug("No connectable device found.")
 
-
     async def disconnect(self):
         """Disconnect from the printer (if connected)"""
 
@@ -294,8 +313,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             return
 
         if len(self.packetsForPrinting) > 0 and not self.cancelled:
-            logger.info('sending cancel command')
-            await self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
+            logger.info("sending cancel command")
+            await self.send_packet(
+                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
+            )
 
         logger.info("Disconnecting...")
         await self.client.disconnect()
@@ -363,14 +384,14 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
     async def send_packet(self, packet, timeout=10, poll_delay=0.10):
         """Send a packet to the printer"""
-        #logger.debug(f"Start sending packet: {packet}, will wait for other packets...")
+        # logger.debug(f"Start sending packet: {packet}, will wait for other packets...")
 
         if not self.client:
             logger.error("No connected device, run connect first.")
             return
 
         with move_on_after(timeout):
-            while (self.awaiting_response and not self.cancelled):
+            while self.awaiting_response and not self.cancelled:
                 await asleep(poll_delay)
 
         try:
@@ -386,14 +407,18 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
             logger.debug(f"> Number of parts to send: {numberOfParts}")
             for subPartIndex in range(numberOfParts):
-                logger.debug(f"> Sending part {subPartIndex + 1}/{numberOfParts}")
+                logger.debug(
+                    f"> Sending part {subPartIndex + 1}/{numberOfParts}"
+                )
                 subPacket = packet[
                     subPartIndex * MAX_PACKET_SIZE : subPartIndex
                     * MAX_PACKET_SIZE
                     + MAX_PACKET_SIZE
                 ]
 
-                await self.client.write_gatt_char(WRITECHAR_UUID, subPacket, response=False)
+                await self.client.write_gatt_char(
+                    WRITECHAR_UUID, subPacket, response=False
+                )
 
         except KeyboardInterrupt:
             self.cancelled = True
