@@ -310,22 +310,22 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         if not self.client:
             return
 
-        if len(self.packetsForPrinting) > 0 and not self.cancelled:
-            logger.info("sending cancel command")
-            await self.send_packet(
-                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
-            )
+        await self.cancel_print()
 
         logger.info("Disconnecting...")
         await self.client.disconnect()
         logger.info("Disconnected")
 
     async def cancel_print(self):
-        self.packets_for_printing = []
+        if len(self.packets_for_printing) > 0:
+            logger.info("Sending print cancel command")
+            await self.send_packet(
+                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
+            )
+
         self.awaiting_response = False
-        await self.send_packet(
-            self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
-        )
+        logger.debug("Clearing packet queue")
+        self.packets_for_printing = []
 
     def enable_printing(self):
         """Enable printing."""
