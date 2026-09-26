@@ -5,8 +5,6 @@ on:
     branches:
       - main
 
-
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -24,5 +22,3 @@ jobs:
           version=$(uv version | awk '{print $NF}')
           git tag "v${version}"
           git push --tag --atomic
-
-
