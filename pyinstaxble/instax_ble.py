@@ -40,10 +40,10 @@ class InstaxBLE:
         self.quiet = quiet
         self.dummyPrinter = dummy_printer
         self.printerSettings = (
-            PrinterSettings["mini"] if self.dummyPrinter else None
+            PrinterSettings.MINI if self.dummyPrinter else None
         )
         self.chunkSize = (
-            PrinterSettings["mini"]["chunkSize"] if self.dummyPrinter else 0
+            PrinterSettings.MINI.chunk_size if self.dummyPrinter else 0
         )
         self.printEnabled = print_enabled
         self.deviceName = device_name.upper() if device_name else None
@@ -58,8 +58,8 @@ class InstaxBLE:
         self.isCharging = False
         self.imageSize = (
             (
-                PrinterSettings["mini"]["width"],
-                PrinterSettings["mini"]["height"],
+                PrinterSettings.MINI.width,
+                PrinterSettings.MINI.height,
             )
             if self.dummyPrinter
             else (0, 0)
@@ -89,13 +89,13 @@ class InstaxBLE:
     def display_current_status(self):
         """Display an overview of the current printer state"""
         print("\nPrinter details: ")
-        # print(f"Device name:         {self.printerSettings['modelName']}")
-        print(f"Model:               {self.printerSettings['modelName']}")
+        # print(f"Device name:         {self.printerSettings.model_name}")
+        print(f"Model:               {self.printerSettings.model_name}")
         print(f"Photos left:         {self.photosLeft}/10")
         print(f"Battery level:       {self.batteryPercentage}%")
         print(f"Charging:            {self.isCharging}")
         print(
-            f"Required image size: {self.printerSettings['width']}x{self.printerSettings['height']}px"
+            f"Required image size: {self.printerSettings.width}x{self.printerSettings.height}px"
         )
         if self.peripheral.mtu:
             print(f"MTU:                 {self.peripheral.mtu()}")
@@ -124,15 +124,15 @@ class InstaxBLE:
                 # self.log(f'image size: {w}x{h}')
                 self.imageSize = (w, h)
                 if (w, h) == (600, 800):
-                    self.printerSettings = PrinterSettings["mini"]
+                    self.printerSettings = PrinterSettings.MINI
                 elif (w, h) == (800, 800):
-                    self.printerSettings = PrinterSettings["square"]
+                    self.printerSettings = PrinterSettings.SQUARE
                 elif (w, h) == (1260, 840):
-                    self.printerSettings = PrinterSettings["wide"]
+                    self.printerSettings = PrinterSettings.WIDE
                 else:
                     sys.exit(f"Unknown image size from printer: {w}x{h}")
 
-                self.chunkSize = self.printerSettings["chunkSize"]
+                self.chunkSize = self.printerSettings.chunk_size
 
             elif infoType == InfoType.BATTERY_INFO:
                 self.batteryState, self.batteryPercentage = unpack_from(
@@ -619,7 +619,7 @@ def main(args=None):
         if instax.image_path:
             instax.print_image(instax.image_path)
         else:
-            instax.print_image(instax.printerSettings["exampleImage"])
+            pass
         instax.wait_one_minute()
 
     except Exception as e:
