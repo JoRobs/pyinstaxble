@@ -1,0 +1,24 @@
+name: Release tag version
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          cache-python: "true"
+          python-version: 3.14
+          version: "0.11.32"
+
+      - name: Push tag from pyproject version
+        id: get-tagname
+        run: |
+          version=$(uv version | awk '{print $NF}')
+          git tag "v${version}"
+          git push --tag --atomic
