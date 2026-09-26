@@ -21,6 +21,7 @@ WRITECHAR_UUID = UUID("70954783-2d83-473d-9e5f-81e1d02d5273")
 NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
+MAX_PACKET_SIZE = 182
 
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData
@@ -117,9 +118,18 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         """
         logger.info(status_string)
 
+    def unawait_response(func):
+        def wrapper(self, *args, **kwargs):
+            try:
+                res = func(self, *args, **kwargs)
+                return res
+            finally:
+                self.awaiting_response = False
+        return wrapper
+
+    @unawait_response
     async def parse_printer_response(self, event, packet):
         """Parse the response packet and print the result"""
-        self.awaiting_response = False
         logger.debug(f"Parsing printer info: event: {event}, packet: {packet}")
 
         if event == EventType.XYZ_AXIS_INFO:
@@ -351,16 +361,17 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         """Validate the checksum of a packet."""
         return (sum(packet) & 255) == 255
 
-    async def send_packet(self, packet):
+    async def send_packet(self, packet, timeout=10, poll_delay=0.10):
         """Send a packet to the printer"""
-        logger.debug(f"Start sending packet: {packet}, will wait for other packets...")
+        #logger.debug(f"Start sending packet: {packet}, will wait for other packets...")
 
         if not self.client:
             logger.error("No connected device, run connect first.")
             return
 
-        while (self.awaiting_response and not self.cancelled):
-            await asleep(0.05)
+        with move_on_after(timeout):
+            while (self.awaiting_response and not self.cancelled):
+                await asleep(poll_delay)
 
         try:
             logger.debug("Finished waiting")
@@ -372,18 +383,17 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 logger.error(e.with_traceback())
 
             self.awaiting_response = True
-            smallPacketSize = 182
-            numberOfParts = ceil(len(packet) / smallPacketSize)
+            numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
             logger.debug(f"> Number of parts to send: {numberOfParts}")
             for subPartIndex in range(numberOfParts):
                 logger.debug(f"> Sending part {subPartIndex + 1}/{numberOfParts}")
                 subPacket = packet[
-                    subPartIndex * smallPacketSize : subPartIndex
-                    * smallPacketSize
-                    + smallPacketSize
+                    subPartIndex * MAX_PACKET_SIZE : subPartIndex
+                    * MAX_PACKET_SIZE
+                    + MAX_PACKET_SIZE
                 ]
 
-                await self.client.write_gatt_char(WRITECHAR_UUID, subPacket, response=True)
+                await self.client.write_gatt_char(WRITECHAR_UUID, subPacket, response=False)
 
         except KeyboardInterrupt:
             self.cancelled = True
@@ -392,8 +402,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             self.disconnect()
             sys.exit("Cancelled")
 
-    # TODO: Update to bleak
-    async def print_image(self, imgSrc):
+    async def print_image(self, imgSrc, timeout=20, poll_delay=0.10):
         """
         print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
@@ -401,7 +410,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         logger.info(f'Printing image "{imgSrc}"')
 
         if self.photos_left == 0:
-            logger.error("Can't print: no photos left")
+            logger.error("Cannot print: no film left in printer.")
             return
 
         imgData = imgSrc
@@ -451,26 +460,21 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             self.packets_for_printing.append(
                 self.create_packet(EventType.PRINT_IMAGE)
             )
-            self.packets_for_printing.append(self.create_packet((0, 2), b"\x02"))
+            self.packets_for_printing.append(
+                self.create_packet((0, 2), b"\x02")
+            )
         else:
             logger.info(
                 "Printing is disabled, sending all packets except the actual print command"
             )
 
-        # for packet in self.packetsForPrinting:
-        #     logger.info(self.prettify_bytearray(packet))
-        # exit()
         # send the first packet from our list, the packet handler will take care of the rest
-        if not self.dummyPrinter:
-            packet = self.packets_for_printing.pop(0)
-            await self.send_packet(packet)
-            # try:
-            #     while len(self.packetsForPrinting) > 0:
-            #         sleep(0.1)
-            # except KeyboardInterrupt:
-            #     self.cancelled = True
-            #     self.disconnect()
-            #     sys.exit('Cancelled')
+        packet = self.packets_for_printing.pop(0)
+        await self.send_packet(packet)
+
+        with move_on_after(timeout):
+            while len(self.packets_for_printing) > 0 or self.awaiting_response:
+                await asleep(poll_delay)
 
     def print_services(self):
         """Display and overview of the printer's services and characteristics"""
