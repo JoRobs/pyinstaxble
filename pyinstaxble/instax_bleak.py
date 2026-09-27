@@ -393,18 +393,11 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.error("No connected device, run connect first.")
             return
 
-        with move_on_after(timeout):
-            while self.awaiting_response and not self.cancelled:
-                await asleep(poll_delay)
-
+        _header, _length, op1, op2 = unpack_from(">HHBB", packet)
         try:
-            logger.debug("Finished waiting")
-
-            _header, _length, op1, op2 = unpack_from(">HHBB", packet)
-            try:
-                EventType((op1, op2))
-            except Exception as e:
-                logger.error(e.with_traceback())
+            EventType((op1, op2))
+        except:
+            logger.exception("Unknown event type")
 
             self.awaiting_response = True
             numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
