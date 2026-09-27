@@ -1,5 +1,7 @@
 import logging
 
+from datetime import datetime
+
 from anyio import run, sleep
 from instax_bleak import InstaxBLEAK
 
@@ -23,12 +25,14 @@ async def main():
 
     # async with bleak.BleakClient(d) as client:
     #     await client.start_notify("70954784-2d83-473d-9e5f-81e1d02d5273", callback)
-    client = InstaxBLEAK(print_enabled=True)
+    client = InstaxBLEAK(print_enabled=False)
     await client.connect(timeout=5)
-    logger.info(client.battery_percentage)
-    path = "/home/sma/Sync/Default/Photos/20250820_104150.jpg"
+    path = "/home/sma/Pictures/16550_main_l-900x563.jpg"
+    start_time = datetime.now()
     await client.print_image(path)
-    await sleep(60)
+    end_time = datetime.now()
+    logger.info(f"Time to print: {end_time - start_time}")
+    await client.disconnect()
 
 
 if __name__ == "__main__":
