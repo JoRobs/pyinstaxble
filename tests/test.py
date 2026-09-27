@@ -1,8 +1,8 @@
 import logging
-
 from datetime import datetime
 
-from anyio import run, sleep
+from anyio import run
+
 from pyinstaxble.instax_bleak import InstaxBLEAK
 
 logging.basicConfig(level=logging.DEBUG)

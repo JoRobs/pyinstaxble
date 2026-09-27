@@ -5,7 +5,7 @@ from math import ceil
 from struct import pack, unpack_from
 from uuid import UUID
 
-from anyio import move_on_after, Lock
+from anyio import Lock, move_on_after
 from anyio import sleep as asleep
 from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from PIL import Image
@@ -24,7 +24,7 @@ WRITECHAR_UUID = UUID("70954783-2d83-473d-9e5f-81e1d02d5273")
 NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
-MAX_PACKET_SIZE = 227 #182
+MAX_PACKET_SIZE = 227  # 182
 
 
 class InstaxBLEAK:

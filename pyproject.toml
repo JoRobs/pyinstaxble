@@ -32,5 +32,7 @@ line-length = 79
 
 [tool.ruff.lint]
 ignore = [
-  "BLE001",
+  "BLE001", # Do not use blind except clauses that catch all exceptions
+  "E722",   # Do not use bare `except`
+  "DTZ005", # `datetime.datetime.now()` called without a `tz` argument
 ]
