@@ -145,7 +145,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 logger.debug(
                     f"Img packets left to send: {len(self.packets_for_printing)}"
                 )
-            with self.packet_lock:
+            async with self.packet_lock:
                 packet = self.packets_for_printing.pop(0)
 
             await self.send_packet(packet)
@@ -197,7 +197,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 elif (w, h) == (1260, 840):
                     self.printer_settings = PrinterSettings.WIDE
                 else:
-                    sys.exit(f"Unknown image size from printer: {w}x{h}")
+                    logger.error(f"Unknown image size from printer: {w}x{h}")
 
                 self.chunk_size = self.printer_settings.chunk_size
                 self.awaiting_info_image = False
@@ -494,14 +494,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         # send the first packet from our list, the packet handler will take care of the rest
         self.awaiting_print = True
-        with self.packet_lock:
+        async with self.packet_lock:
             packet = self.packets_for_printing.pop(0)
         await self.send_packet(packet)
-
-        with self.packet_lock:
-            another_packet = self.packets_for_printing.pop(0)
-        await self.send_packet(another_packet)
-
 
         with move_on_after(timeout):
             while len(self.packets_for_printing) > 0 or self.awaiting_print:
