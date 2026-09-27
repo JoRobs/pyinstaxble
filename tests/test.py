@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 from anyio import run, sleep
-from instax_bleak import InstaxBLEAK
+from pyinstaxble.instax_bleak import InstaxBLEAK
 
 logging.basicConfig(level=logging.DEBUG)
 
