@@ -17,10 +17,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev=[
-  "pycodestyle==2.14.0",
+  "pycodestyle~=2.14.0",
 ]
 lint = [
     "ruff>=0.16.0",
+]
+profile=[
+  "scalene~=2.3.0",
 ]
 
 [tool.ruff]
