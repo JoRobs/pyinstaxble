@@ -5,7 +5,7 @@ from math import ceil
 from struct import pack, unpack_from
 from uuid import UUID
 
-from anyio import move_on_after
+from anyio import move_on_after, Lock
 from anyio import sleep as asleep
 from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from PIL import Image
@@ -57,6 +57,7 @@ class InstaxBLEAK:
             device_address.upper() if device_address else None
         )
         self.packets_for_printing: list = []
+        self.packet_lock = Lock()
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
         self.battery_percentage = 0
@@ -70,6 +71,7 @@ class InstaxBLEAK:
         self.awaiting_info_battery = False
         self.awaiting_info_image = False
         self.awaiting_info_printfunc = False
+        self.awaiting_print = False
 
     def detection_callback(self, device, data) -> None:
         if not data.local_name and device.name:
@@ -137,11 +139,40 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         return wrapper
 
-    @unawait_response
-    async def parse_printer_response(self, event, packet):
-        """Parse the response packet and print the result"""
-        logger.debug(f"Parsing printer info: event: {event}, packet: {packet}")
+    async def handle_image_packet_queue(self):
+        if len(self.packets_for_printing) > 0 and not self.cancelled:
+            if len(self.packets_for_printing) % 10 == 0:
+                logger.debug(
+                    f"Img packets left to send: {len(self.packets_for_printing)}"
+                )
+            with self.packet_lock:
+                packet = self.packets_for_printing.pop(0)
 
+            await self.send_packet(packet)
+
+    async def notification_handler(self, char_uuid, packet) -> None:
+        """Gets called whenever the printer replies and handles parsing the received data"""
+        logger.debug(f"Char: {char_uuid}\tBytes: {packet}")
+
+        # Validation
+        if len(packet) < 8:
+            logger.error(
+                f"Response packet size should be >= 8 (was {len(packet)})!"
+            )
+            return
+        elif not self.validate_checksum(packet):
+            logger.error("Response packet checksum was invalid!")
+            return
+
+        _header, _length, op1, op2 = unpack_from(">HHBB", packet)
+
+        try:
+            event = EventType((op1, op2))
+        except ValueError:
+            logger.error(f"Unknown EventType: ({op1}, {op2})")
+            return
+
+        # Parse printer event
         if event == EventType.XYZ_AXIS_INFO:
             x, y, z, o = unpack_from("<hhhB", packet[6:-1])
             self.pos = (x, y, z, o)
@@ -197,49 +228,14 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
             logger.debug("Received print cancel confirmation")
+            self.awaiting_print = False
 
         elif event == EventType.PRINT_IMAGE:
             logger.debug("Received print confirmation")
+            self.awaiting_print = False
 
         else:
             logger.error(f"Unknown response from printer. Eventype: {event}")
-
-    async def handle_image_packet_queue(self):
-        if len(self.packets_for_printing) > 0 and not self.cancelled:
-            if len(self.packets_for_printing) % 10 == 0:
-                logger.debug(
-                    f"Img packets left to send: {len(self.packets_for_printing)}"
-                )
-            packet = self.packets_for_printing.pop(0)
-            await self.send_packet(packet)
-
-    async def notification_handler(self, char_uuid, packet) -> None:
-        """Gets called whenever the printer replies and handles parsing the received data"""
-        logger.debug(f"Char: {char_uuid}")
-        logger.debug(f"Bytes: {packet}")
-
-        if len(packet) < 8:
-            logger.error(
-                f"\tError: response packet size should be >= 8 (was {len(packet)})!"
-            )
-            return
-        elif not self.validate_checksum(packet):
-            logger.error("\tResponse packet checksum was invalid!")
-            return
-
-        _header, _length, op1, op2 = unpack_from(">HHBB", packet)
-        # logger.info('\theader: ', header, '\t', self.prettify_bytearray(packet[0:2]))
-        # logger.info('\tlength: ', length, '\t', self.prettify_bytearray(packet[2:4]))
-        # logger.info('\top1: ', op1, '\t\t', self.prettify_bytearray(packet[4:5]))
-        # logger.info('\top2: ', op2, '\t\t', self.prettify_bytearray(packet[5:6]))
-
-        try:
-            event = EventType((op1, op2))
-        except ValueError:
-            logger.error(f"Unknown EventType: ({op1}, {op2})")
-            return
-
-        await self.parse_printer_response(event, packet)
 
     async def find_device(self, timeout=5) -> BLEDevice | None:
         """ " Scan for our device and return it when found"""
@@ -328,7 +324,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
-        self.awaiting_response = False
         logger.debug("Clearing packet queue")
         self.packets_for_printing = []
 
@@ -385,11 +380,11 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         """Validate the checksum of a packet."""
         return (sum(packet) & 255) == 255
 
-    async def send_packet(self, packet, timeout=10, poll_delay=0.10):
+    async def send_packet(self, packet):
         """Send a packet to the printer"""
         # logger.debug(f"Start sending packet: {packet}, will wait for other packets...")
 
-        if not self.client:
+        if not self.is_connected():
             logger.error("No connected device, run connect first.")
             return
 
@@ -399,9 +394,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         except:
             logger.exception("Unknown event type")
 
-            self.awaiting_response = True
-            numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
-            logger.debug(f"> Number of parts to send: {numberOfParts}")
+        self.awaiting_response = True
+        numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
+        logger.debug(f"> Number of parts to send: {numberOfParts}")
+        try:
             for subPartIndex in range(numberOfParts):
                 logger.debug(
                     f"> Sending part {subPartIndex + 1}/{numberOfParts}"
@@ -423,24 +419,28 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             self.disconnect()
             sys.exit("Cancelled")
 
-    async def print_image(self, imgSrc, timeout=20, poll_delay=0.10):
+    async def print_image(self, img_src, timeout=20, poll_delay=0.10):
         """
         print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
         """
-        logger.info(f'Printing image "{imgSrc}"')
 
-        if self.photos_left == 0:
-            logger.error("Cannot print: no film left in printer.")
+        if not self.is_connected():
+            logger.error("No connected device, run connect first.")
             return
 
-        imgData = imgSrc
-        if isinstance(imgSrc, str):  # if it's a path, load the image contents
-            image = Image.open(imgSrc)
+        if self.photos_left == 0:
+            logger.error("Cannot print, no film left in printer.")
+            return
+
+        logger.info(f'Printing image "{img_src}"')
+        imgData = img_src
+        if isinstance(img_src, str):  # if it's a path, load the image contents
+            image = Image.open(img_src)
             imgData = self.pil_image_to_bytes(image, max_size_kb=105)
-        elif isinstance(imgSrc, BytesIO):
-            imgSrc.seek(0)  # Go to the start of the BytesIO object
-            image = Image.open(imgSrc)
+        elif isinstance(img_src, BytesIO):
+            img_src.seek(0)  # Go to the start of the BytesIO object
+            image = Image.open(img_src)
             imgData = self.pil_image_to_bytes(image, max_size_kb=105)
 
         # logger.info(f"len of imagedata: {len(imgData)}")
@@ -493,11 +493,18 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             )
 
         # send the first packet from our list, the packet handler will take care of the rest
-        packet = self.packets_for_printing.pop(0)
+        self.awaiting_print = True
+        with self.packet_lock:
+            packet = self.packets_for_printing.pop(0)
         await self.send_packet(packet)
 
+        with self.packet_lock:
+            another_packet = self.packets_for_printing.pop(0)
+        await self.send_packet(another_packet)
+
+
         with move_on_after(timeout):
-            while len(self.packets_for_printing) > 0 or self.awaiting_response:
+            while len(self.packets_for_printing) > 0 or self.awaiting_print:
                 await asleep(poll_delay)
 
     def print_services(self):
@@ -570,3 +577,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             img.save(img_buffer, format="JPEG")
 
         return bytearray(img_buffer.getvalue())
+
+    def is_connected(self):
+        return (self.client != None) and self.client.is_connected
