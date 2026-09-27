@@ -191,10 +191,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             await self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
-            pass
+            logger.debug("Received print cancel confirmation")
 
         elif event == EventType.PRINT_IMAGE:
-            logger.debug("received print confirmation")
+            logger.debug("Received print confirmation")
 
         else:
             logger.error(f"Unknown response from printer. Eventype: {event}")
@@ -488,7 +488,10 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             )
         else:
             logger.info(
-                "Printing is disabled, sending all packets except the actual print command"
+                "Printing is disabled, sending all packets followed by a print cancel command"
+            )
+            self.packets_for_printing.append(
+                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
         # send the first packet from our list, the packet handler will take care of the rest
