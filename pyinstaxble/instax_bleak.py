@@ -183,11 +183,16 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 self.is_charging = (1 << 7) & dataByte >= 1
                 self.awaiting_info_printfunc = False
 
-        elif (
-            event == EventType.PRINT_IMAGE_DOWNLOAD_START
-            or event == EventType.PRINT_IMAGE_DOWNLOAD_DATA
-            or event == EventType.PRINT_IMAGE_DOWNLOAD_END
-        ):
+        elif event == EventType.PRINT_IMAGE_DOWNLOAD_START:
+            logger.debug("Received print download start confirmation")
+            await self.handle_image_packet_queue()
+
+        elif event == EventType.PRINT_IMAGE_DOWNLOAD_DATA:
+            logger.debug("Received print mid-download confirmation")
+            await self.handle_image_packet_queue()
+
+        elif event == EventType.PRINT_IMAGE_DOWNLOAD_END:
+            logger.debug("Received print download finished confirmation")
             await self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
