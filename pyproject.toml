@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyinstaxble"
-version = "0.2.2"
+version = "0.2.3.dev0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = "~=3.11.0"
@@ -17,10 +17,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev=[
-  "pycodestyle==2.14.0",
+  "pycodestyle~=2.14.0",
 ]
 lint = [
     "ruff>=0.16.0",
+]
+profile=[
+  "scalene~=2.3.0",
 ]
 
 [tool.ruff]
@@ -29,5 +32,7 @@ line-length = 79
 
 [tool.ruff.lint]
 ignore = [
-  "BLE001",
+  "BLE001", # Do not use blind except clauses that catch all exceptions
+  "E722",   # Do not use bare `except`
+  "DTZ005", # `datetime.datetime.now()` called without a `tz` argument
 ]
