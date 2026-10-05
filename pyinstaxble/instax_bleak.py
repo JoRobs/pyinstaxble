@@ -577,6 +577,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
     def is_connected(self):
         if not self.client:
             logger.debug("No client")
+            return False
         if not self.client.is_connected:
             logger.debug("Client exists but is not connected")
             return False
