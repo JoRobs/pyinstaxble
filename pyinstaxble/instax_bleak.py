@@ -11,6 +11,7 @@ from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from bleak.exc import BleakError
 from PIL import Image
 
+from pyinstaxble.exceptions import PrinterTimeoutError
 from pyinstaxble.instax_types import (
     EventType,
     InfoType,
@@ -26,7 +27,7 @@ NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 227  # 182
-
+PRINT_TIME_SECONDS = 6
 
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData | None
@@ -117,6 +118,8 @@ class InstaxBLEAK:
                 or self.awaiting_info_printfunc
             ) and not self.cancelled:
                 await asleep(poll_delay)
+            return
+        raise PrinterTimeoutError(timeout)
 
     def display_current_status(self):
         """Display an overview of the current printer state"""
@@ -246,7 +249,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.error(f"Unknown response from printer. Eventype: {event}")
 
     async def find_device(self, timeout=5) -> BLEDevice | None:
-        """ " Scan for our device and return it when found"""
+        """
+        Scan for our device and return it when found.
+
+        Raises:
+            PrinterTimeoutError: If no device is found before the timeout.
+        """
         logger.debug("Searching for instax printer...")
 
         def device_filter(device: BLEDevice, data: AdvertisementData):
@@ -270,6 +278,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             )
             if device:
                 return device
+
             search_criteria = next(
                 i
                 for i in (
@@ -280,13 +289,21 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 if i
             )
             logger.error(f"Device {search_criteria} was not found during scan")
+            raise PrinterTimeoutError(timeout)
+        except PrinterTimeoutError:
+            raise
         except Exception as e:
             logger.error(e)
 
     async def connect(self, timeout=5):
-        """Connect to the printer. Stops trying after the timeout."""
+        """
+        Connect to the printer. Stops trying after the timeout.
+        """
 
-        device = await self.find_device(timeout=timeout)
+        try:
+            device = await self.find_device(timeout=timeout)
+        except PrinterTimeoutError:
+            device = None
 
         if device:
             logger.info(f"Connecting to {device.name} [{device.address}]")
@@ -308,8 +325,11 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 logger.error(f"Error on attaching notification_handler: {e}")
                 return
 
-            await self.get_printer_info(timeout)
-            self.display_current_status()
+            try:
+                await self.get_printer_info(timeout)
+                self.display_current_status()
+            except PrinterTimeoutError as e:
+                logger.error(f"Unable to get connected device info after {e.timeout} seconds")
 
         else:
             logger.debug("No connectable device found.")
@@ -429,10 +449,13 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             self.disconnect()
             sys.exit("Cancelled")
 
-    async def print_image(self, img_src, timeout=20, poll_delay=0.10):
+    async def print_image(self, img_src, timeout=25, poll_delay=0.10):
         """
-        print an image. Either pass a path to an image (as a string) or pass
+        Print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
+
+        Raises:
+            PrinterTimeoutError: If the image print is not complete before the timeout.
         """
 
         if not self.is_connected():
@@ -513,6 +536,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         with move_on_after(timeout):
             while len(self.packets_for_printing) > 0 or self.awaiting_print:
                 await asleep(poll_delay)
+            await asleep(PRINT_TIME_SECONDS)
+            return
+
+        logger.error("Print image timeout exceeded, cancelling print.")
+        self.cancel_print()
+        raise PrinterTimeoutError(timeout)
 
     def print_services(self):
         """Display and overview of the printer's services and characteristics"""
