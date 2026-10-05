@@ -28,6 +28,7 @@ INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 227  # 182
 PRINT_TIME_SECONDS = 6
+NO_PACKETS = -1
 
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData | None
@@ -59,7 +60,7 @@ class InstaxBLEAK:
             device_address.upper() if device_address else None
         )
         self.packets_for_printing: list = []
-        self.total_packets_for_printing = -1
+        self.total_packets_for_printing = NO_PACKETS
         self.packet_lock = Lock()
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
@@ -146,20 +147,28 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         return wrapper
 
     async def handle_image_packet_queue(self):
-        if len(self.packets_for_printing) > 0 and not self.cancelled:
-            remaining_packets = len(self.packets_for_printing) - 1
-            pct = (
-                100 - 100 * remaining_packets / self.total_packets_for_printing
-            )
-            if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
-                logger.info(f"Image upload progress: {ceil(pct)}%")
-                logger.debug(
-                    f"Img packets left to send: {len(self.packets_for_printing)}"
-                )
-            async with self.packet_lock:
-                packet = self.packets_for_printing.pop(0)
+        if len(self.packets_for_printing) == 0:
+            return
 
-            await self.send_packet(packet)
+        if self.cancelled:
+            self.info("In cancelled state, will not send more data. Clearing packet queue")
+            self.packets_for_printing = []
+            self.total_packets_for_printing = NO_PACKETS
+            return
+
+        remaining_packets = len(self.packets_for_printing) - 1
+        pct = (
+            100 - 100 * remaining_packets / self.total_packets_for_printing
+        )
+        if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
+            logger.info(f"Image upload progress: {ceil(pct)}%")
+            logger.debug(
+                f"Img packets left to send: {len(self.packets_for_printing)}"
+            )
+        async with self.packet_lock:
+            packet = self.packets_for_printing.pop(0)
+
+        await self.send_packet(packet)
 
     async def notification_handler(self, char_uuid, packet) -> None:
         """Gets called whenever the printer replies and handles parsing the received data"""
@@ -245,7 +254,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         elif event == EventType.PRINT_IMAGE:
             logger.debug("Received print confirmation")
             self.awaiting_print = False
-            self.total_packets_for_printing = -1
+            self.total_packets_for_printing = NO_PACKETS
 
         else:
             logger.error(f"Unknown response from printer. Eventype: {event}")
@@ -351,18 +360,16 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
     async def cancel_print(self, timeout=5, poll_delay=0.1):
         if len(self.packets_for_printing) > 0:
             logger.info("Sending print cancel command")
+            self.cancelled = True # Prevent more packets being sent
             self.awaiting_cancel = True
             await self.send_packet(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
             with move_on_after(timeout):
-                while(self.awaiting_cancel):
+                while(self.awaiting_cancel and len(self.packets_for_printing) != 0):
                     await asleep(poll_delay)
-
-        logger.info("Clearing packet queue")
-        self.packets_for_printing = []
-        self.total_packets_for_printing = -1
+                self.cancelled = False
 
     def enable_printing(self):
         """Enable printing."""
