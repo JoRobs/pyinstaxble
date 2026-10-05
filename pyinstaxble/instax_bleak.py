@@ -144,10 +144,14 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
     async def handle_image_packet_queue(self):
         if len(self.packets_for_printing) > 0 and not self.cancelled:
             remaining_packets = len(self.packets_for_printing) - 1
-            pct = 100 - 100 * remaining_packets / self.total_packets_for_printing
+            pct = (
+                100 - 100 * remaining_packets / self.total_packets_for_printing
+            )
             if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
                 logger.info(f"Image upload progress: {ceil(pct)}%")
-                logger.debug(f"Img packets left to send: {len(self.packets_for_printing)}")
+                logger.debug(
+                    f"Img packets left to send: {len(self.packets_for_printing)}"
+                )
             async with self.packet_lock:
                 packet = self.packets_for_printing.pop(0)
 
