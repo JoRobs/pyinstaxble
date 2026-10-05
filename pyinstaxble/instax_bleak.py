@@ -30,6 +30,7 @@ MAX_PACKET_SIZE = 227  # 182
 PRINT_TIME_SECONDS = 6
 NO_PACKETS = -1
 
+
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData | None
     device_address: str | None
@@ -151,15 +152,15 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             return
 
         if self.cancelled:
-            logger.warning("Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue.")
+            logger.warning(
+                "Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue."
+            )
             self.packets_for_printing = []
             self.total_packets_for_printing = NO_PACKETS
             return
 
         remaining_packets = len(self.packets_for_printing) - 1
-        pct = (
-            100 - 100 * remaining_packets / self.total_packets_for_printing
-        )
+        pct = 100 - 100 * remaining_packets / self.total_packets_for_printing
         if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
             logger.info(f"Image upload progress: {ceil(pct)}%")
             logger.debug(
@@ -299,7 +300,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 )
                 if i
             )
-            logger.warning(f"Device {search_criteria} was not found during scan")
+            logger.warning(
+                f"Device {search_criteria} was not found during scan"
+            )
             raise PrinterTimeoutError(timeout)
         except PrinterTimeoutError:
             raise
@@ -340,7 +343,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 await self.get_printer_info(timeout)
                 self.display_current_status()
             except PrinterTimeoutError as e:
-                logger.warning(f"Unable to get connected device info after {e.timeout} seconds")
+                logger.warning(
+                    f"Unable to get connected device info after {e.timeout} seconds"
+                )
 
         else:
             logger.debug("No connectable device found.")
@@ -360,14 +365,17 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
     async def cancel_print(self, timeout=5, poll_delay=0.1):
         if len(self.packets_for_printing) > 0:
             logger.info("Sending print cancel command")
-            self.cancelled = True # Prevent more packets being sent
+            self.cancelled = True  # Prevent more packets being sent
             self.awaiting_cancel = True
             await self.send_packet(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
             with move_on_after(timeout):
-                while(self.awaiting_cancel and len(self.packets_for_printing) != 0):
+                while (
+                    self.awaiting_cancel
+                    and len(self.packets_for_printing) != 0
+                ):
                     await asleep(poll_delay)
                 self.cancelled = False
 
