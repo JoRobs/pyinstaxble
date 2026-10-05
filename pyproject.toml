@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyinstaxble"
-version = "0.2.4"
+version = "0.3.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = "~=3.11.0"
+requires-python = ">=3.11"
 dependencies = [
   "anyio>=4.14.2",
   "bleak>=3.0.2",
-  "pillow==9.5.0",
-  "simplepyble==0.7.1",
+  "pillow>=9.5.0",
+  "simplepyble>=1.2.0"
 ]
 
 [project.optional-dependencies]

@@ -58,6 +58,7 @@ class InstaxBLEAK:
             device_address.upper() if device_address else None
         )
         self.packets_for_printing: list = []
+        self.total_packets_for_printing = -1
         self.packet_lock = Lock()
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
@@ -142,7 +143,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
     async def handle_image_packet_queue(self):
         if len(self.packets_for_printing) > 0 and not self.cancelled:
-            if len(self.packets_for_printing) % 10 == 0:
+            remaining_packets = len(self.packets_for_printing) - 1
+            pct = (
+                100 - 100 * remaining_packets / self.total_packets_for_printing
+            )
+            if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
+                logger.info(f"Image upload progress: {ceil(pct)}%")
                 logger.debug(
                     f"Img packets left to send: {len(self.packets_for_printing)}"
                 )
@@ -234,6 +240,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         elif event == EventType.PRINT_IMAGE:
             logger.debug("Received print confirmation")
             self.awaiting_print = False
+            self.total_packets_for_printing = -1
 
         else:
             logger.error(f"Unknown response from printer. Eventype: {event}")
@@ -289,6 +296,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 await self.client.connect()
             except:
                 logger.exception(f"Error connecting to {device.name}")
+                return
 
             logger.info("Connected")
 
@@ -327,6 +335,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         logger.debug("Clearing packet queue")
         self.packets_for_printing = []
+        self.total_packets_for_printing = -1
 
     def enable_printing(self):
         """Enable printing."""
@@ -430,7 +439,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.error("No connected device, run connect first.")
             return
 
-        if self.photos_left == 0:
+        if self.photos_left == 0 and self.print_enabled:
             logger.error("Cannot print, no film left in printer.")
             return
 
@@ -492,6 +501,8 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             self.packets_for_printing.append(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
+
+        self.total_packets_for_printing = len(self.packets_for_printing)
 
         # send the first packet from our list, the packet handler will take care of the rest
         self.awaiting_print = True
