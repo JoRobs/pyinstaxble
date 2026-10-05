@@ -1,13 +1,14 @@
 import logging
 import random
 from datetime import datetime
+from os.path import abspath
 
 from anyio import create_task_group, run
 from anyio import sleep as asleep
 
 from pyinstaxble.instax_bleak import InstaxBLEAK
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 logging.getLogger("bleak").setLevel(logging.ERROR)
 
@@ -41,7 +42,7 @@ async def main():
         tg.start_soon(check_connected, client)
 
     logger.info(f"Client connected: {client.is_connected()}")
-    path = "/home/sma/Pictures/16550_main_l-900x563.jpg"
+    path = abspath("./resources/example-mini.jpg")
     start_time = datetime.now()
     await client.print_image(path)
     end_time = datetime.now()
