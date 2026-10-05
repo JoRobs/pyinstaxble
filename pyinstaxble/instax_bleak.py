@@ -151,7 +151,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             return
 
         if self.cancelled:
-            self.info("In cancelled state, will not send more data. Clearing packet queue")
+            logger.warning("Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue.")
             self.packets_for_printing = []
             self.total_packets_for_printing = NO_PACKETS
             return
@@ -247,7 +247,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             await self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
-            logger.info("Received print cancel confirmation")
+            logger.debug("Received print cancel confirmation")
             self.awaiting_print = False
             self.awaiting_cancel = False
 
@@ -299,7 +299,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 )
                 if i
             )
-            logger.error(f"Device {search_criteria} was not found during scan")
+            logger.warning(f"Device {search_criteria} was not found during scan")
             raise PrinterTimeoutError(timeout)
         except PrinterTimeoutError:
             raise
@@ -340,7 +340,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 await self.get_printer_info(timeout)
                 self.display_current_status()
             except PrinterTimeoutError as e:
-                logger.error(f"Unable to get connected device info after {e.timeout} seconds")
+                logger.warning(f"Unable to get connected device info after {e.timeout} seconds")
 
         else:
             logger.debug("No connectable device found.")
@@ -552,7 +552,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             await asleep(PRINT_TIME_SECONDS)
             return
 
-        logger.error("Print image timeout exceeded, cancelling print.")
+        logger.warning("Print image timeout exceeded, cancelling print.")
         await self.cancel_print()
         raise PrinterTimeoutError(timeout)
 
