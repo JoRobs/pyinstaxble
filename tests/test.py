@@ -1,7 +1,9 @@
 import logging
+import random
 from datetime import datetime
 
-from anyio import run
+from anyio import create_task_group, run
+from anyio import sleep as asleep
 
 from pyinstaxble.instax_bleak import InstaxBLEAK
 
@@ -17,6 +19,12 @@ async def callback(char_uuid, data) -> None:
     logger.info(data)
 
 
+async def check_connected(client):
+    rand = random.random()
+    await asleep(rand)
+    client.is_connected()
+
+
 async def main():
     # scanner = bleak.BleakScanner()
     # devices = await scanner.discover()
@@ -26,7 +34,13 @@ async def main():
     # async with bleak.BleakClient(d) as client:
     #     await client.start_notify("70954784-2d83-473d-9e5f-81e1d02d5273", callback)
     client = InstaxBLEAK(print_enabled=False)
-    await client.connect(timeout=5)
+    async with create_task_group() as tg:
+        tg.start_soon(client.connect, 5)
+        tg.start_soon(check_connected, client)
+        tg.start_soon(check_connected, client)
+        tg.start_soon(check_connected, client)
+
+    logger.info(f"Client connected: {client.is_connected()}")
     path = "/home/sma/Pictures/16550_main_l-900x563.jpg"
     start_time = datetime.now()
     await client.print_image(path)
