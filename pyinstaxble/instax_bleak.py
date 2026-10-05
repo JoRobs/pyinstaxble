@@ -431,7 +431,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.error("No connected device, run connect first.")
             return
 
-        if self.photos_left == 0:
+        if self.photos_left == 0 and self.print_enabled:
             logger.error("Cannot print, no film left in printer.")
             return
 
