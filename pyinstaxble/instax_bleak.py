@@ -11,6 +11,7 @@ from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from bleak.exc import BleakError
 from PIL import Image
 
+from pyinstaxble.exceptions import PrinterTimeoutError
 from pyinstaxble.instax_types import (
     EventType,
     InfoType,
@@ -26,6 +27,8 @@ NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 227  # 182
+PRINT_TIME_SECONDS = 6
+NO_PACKETS = -1
 
 
 class InstaxBLEAK:
@@ -58,7 +61,7 @@ class InstaxBLEAK:
             device_address.upper() if device_address else None
         )
         self.packets_for_printing: list = []
-        self.total_packets_for_printing = -1
+        self.total_packets_for_printing = NO_PACKETS
         self.packet_lock = Lock()
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
@@ -69,6 +72,7 @@ class InstaxBLEAK:
         self.cancelled = False
         self.scanner = BleakScanner(self.detection_callback)
 
+        self.awaiting_cancel = False
         self.awaiting_response = False
         self.awaiting_info_battery = False
         self.awaiting_info_image = False
@@ -117,6 +121,8 @@ class InstaxBLEAK:
                 or self.awaiting_info_printfunc
             ) and not self.cancelled:
                 await asleep(poll_delay)
+            return
+        raise PrinterTimeoutError(timeout)
 
     def display_current_status(self):
         """Display an overview of the current printer state"""
@@ -142,20 +148,28 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         return wrapper
 
     async def handle_image_packet_queue(self):
-        if len(self.packets_for_printing) > 0 and not self.cancelled:
-            remaining_packets = len(self.packets_for_printing) - 1
-            pct = (
-                100 - 100 * remaining_packets / self.total_packets_for_printing
-            )
-            if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
-                logger.info(f"Image upload progress: {ceil(pct)}%")
-                logger.debug(
-                    f"Img packets left to send: {len(self.packets_for_printing)}"
-                )
-            async with self.packet_lock:
-                packet = self.packets_for_printing.pop(0)
+        if len(self.packets_for_printing) == 0:
+            return
 
-            await self.send_packet(packet)
+        if self.cancelled:
+            logger.warning(
+                "Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue."
+            )
+            self.packets_for_printing = []
+            self.total_packets_for_printing = NO_PACKETS
+            return
+
+        remaining_packets = len(self.packets_for_printing) - 1
+        pct = 100 - 100 * remaining_packets / self.total_packets_for_printing
+        if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
+            logger.info(f"Image upload progress: {ceil(pct)}%")
+            logger.debug(
+                f"Img packets left to send: {len(self.packets_for_printing)}"
+            )
+        async with self.packet_lock:
+            packet = self.packets_for_printing.pop(0)
+
+        await self.send_packet(packet)
 
     async def notification_handler(self, char_uuid, packet) -> None:
         """Gets called whenever the printer replies and handles parsing the received data"""
@@ -236,17 +250,23 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
             logger.debug("Received print cancel confirmation")
             self.awaiting_print = False
+            self.awaiting_cancel = False
 
         elif event == EventType.PRINT_IMAGE:
             logger.debug("Received print confirmation")
             self.awaiting_print = False
-            self.total_packets_for_printing = -1
+            self.total_packets_for_printing = NO_PACKETS
 
         else:
             logger.error(f"Unknown response from printer. Eventype: {event}")
 
     async def find_device(self, timeout=5) -> BLEDevice | None:
-        """ " Scan for our device and return it when found"""
+        """
+        Scan for our device and return it when found.
+
+        Raises:
+            PrinterTimeoutError: If no device is found before the timeout.
+        """
         logger.debug("Searching for instax printer...")
 
         def device_filter(device: BLEDevice, data: AdvertisementData):
@@ -270,6 +290,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             )
             if device:
                 return device
+
             search_criteria = next(
                 i
                 for i in (
@@ -279,14 +300,24 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 )
                 if i
             )
-            logger.error(f"Device {search_criteria} was not found during scan")
+            logger.warning(
+                f"Device {search_criteria} was not found during scan"
+            )
+            raise PrinterTimeoutError(timeout)
+        except PrinterTimeoutError:
+            raise
         except Exception as e:
             logger.error(e)
 
     async def connect(self, timeout=5):
-        """Connect to the printer. Stops trying after the timeout."""
+        """
+        Connect to the printer. Stops trying after the timeout.
+        """
 
-        device = await self.find_device(timeout=timeout)
+        try:
+            device = await self.find_device(timeout=timeout)
+        except PrinterTimeoutError:
+            device = None
 
         if device:
             logger.info(f"Connecting to {device.name} [{device.address}]")
@@ -308,8 +339,13 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 logger.error(f"Error on attaching notification_handler: {e}")
                 return
 
-            await self.get_printer_info(timeout)
-            self.display_current_status()
+            try:
+                await self.get_printer_info(timeout)
+                self.display_current_status()
+            except PrinterTimeoutError as e:
+                logger.warning(
+                    f"Unable to get connected device info after {e.timeout} seconds"
+                )
 
         else:
             logger.debug("No connectable device found.")
@@ -326,16 +362,22 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         await self.client.disconnect()
         logger.info("Disconnected")
 
-    async def cancel_print(self):
+    async def cancel_print(self, timeout=5, poll_delay=0.1):
         if len(self.packets_for_printing) > 0:
             logger.info("Sending print cancel command")
+            self.cancelled = True  # Prevent more packets being sent
+            self.awaiting_cancel = True
             await self.send_packet(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
-        logger.debug("Clearing packet queue")
-        self.packets_for_printing = []
-        self.total_packets_for_printing = -1
+            with move_on_after(timeout):
+                while (
+                    self.awaiting_cancel
+                    and len(self.packets_for_printing) != 0
+                ):
+                    await asleep(poll_delay)
+                self.cancelled = False
 
     def enable_printing(self):
         """Enable printing."""
@@ -424,15 +466,17 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         except KeyboardInterrupt:
             self.cancelled = True
-            self.cancel_print()
-            # sleep(1)
-            self.disconnect()
+            await self.cancel_print()
+            await self.disconnect()
             sys.exit("Cancelled")
 
-    async def print_image(self, img_src, timeout=20, poll_delay=0.10):
+    async def print_image(self, img_src, timeout=25, poll_delay=0.10):
         """
-        print an image. Either pass a path to an image (as a string) or pass
+        Print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
+
+        Raises:
+            PrinterTimeoutError: If the image print is not complete before the timeout.
         """
 
         if not self.is_connected():
@@ -513,6 +557,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         with move_on_after(timeout):
             while len(self.packets_for_printing) > 0 or self.awaiting_print:
                 await asleep(poll_delay)
+            await asleep(PRINT_TIME_SECONDS)
+            return
+
+        logger.warning("Print image timeout exceeded, cancelling print.")
+        await self.cancel_print()
+        raise PrinterTimeoutError(timeout)
 
     def print_services(self):
         """Display and overview of the printer's services and characteristics"""
