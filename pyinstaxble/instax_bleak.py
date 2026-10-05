@@ -8,8 +8,8 @@ from uuid import UUID
 from anyio import Lock, move_on_after
 from anyio import sleep as asleep
 from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
-from PIL import Image
 from bleak.exc import BleakError
+from PIL import Image
 
 from pyinstaxble.instax_types import (
     EventType,
@@ -584,7 +584,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         try:
             _ = self.client.services
         except BleakError:
-            logger.debug("Client exists and is connected but waiting on service discovery")
+            logger.debug(
+                "Client exists and is connected but waiting on service discovery"
+            )
             return False
 
         return True
