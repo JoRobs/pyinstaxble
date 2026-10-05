@@ -289,6 +289,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 await self.client.connect()
             except:
                 logger.exception(f"Error connecting to {device.name}")
+                return
 
             logger.info("Connected")
 
