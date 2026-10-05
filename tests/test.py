@@ -44,7 +44,7 @@ async def main():
     logger.info(f"Client connected: {client.is_connected()}")
     path = abspath("./resources/example-mini.jpg")
     start_time = datetime.now()
-    await client.print_image(path)
+    await client.print_image(path, 1)
     end_time = datetime.now()
     logger.info(f"Time to print: {end_time - start_time}")
     await client.disconnect()

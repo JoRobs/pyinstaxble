@@ -70,6 +70,7 @@ class InstaxBLEAK:
         self.cancelled = False
         self.scanner = BleakScanner(self.detection_callback)
 
+        self.awaiting_cancel = False
         self.awaiting_response = False
         self.awaiting_info_battery = False
         self.awaiting_info_image = False
@@ -237,8 +238,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             await self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
-            logger.debug("Received print cancel confirmation")
+            logger.info("Received print cancel confirmation")
             self.awaiting_print = False
+            self.awaiting_cancel = False
 
         elif event == EventType.PRINT_IMAGE:
             logger.debug("Received print confirmation")
@@ -346,14 +348,19 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         await self.client.disconnect()
         logger.info("Disconnected")
 
-    async def cancel_print(self):
+    async def cancel_print(self, timeout=5, poll_delay=0.1):
         if len(self.packets_for_printing) > 0:
             logger.info("Sending print cancel command")
+            self.awaiting_cancel = True
             await self.send_packet(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
-        logger.debug("Clearing packet queue")
+            with move_on_after(timeout):
+                while(self.awaiting_cancel):
+                    await asleep(poll_delay)
+
+        logger.info("Clearing packet queue")
         self.packets_for_printing = []
         self.total_packets_for_printing = -1
 
@@ -444,9 +451,8 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         except KeyboardInterrupt:
             self.cancelled = True
-            self.cancel_print()
-            # sleep(1)
-            self.disconnect()
+            await self.cancel_print()
+            await self.disconnect()
             sys.exit("Cancelled")
 
     async def print_image(self, img_src, timeout=25, poll_delay=0.10):
@@ -540,7 +546,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             return
 
         logger.error("Print image timeout exceeded, cancelling print.")
-        self.cancel_print()
+        await self.cancel_print()
         raise PrinterTimeoutError(timeout)
 
     def print_services(self):
