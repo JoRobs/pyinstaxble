@@ -574,7 +574,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         return bytearray(img_buffer.getvalue())
 
-    def is_connected(self, cooldown=0.05):
+    def is_connected(self):
         if not self.client:
             logger.debug("No client")
         if not self.client.is_connected:
