@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "anyio>=4.14.2",
   "bleak>=3.0.2",
-  "pillow==9.5.0",
+  "pillow>=9.5.0",
   "simplepyble>=1.2.0"
 ]
 
