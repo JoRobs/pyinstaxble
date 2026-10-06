@@ -27,15 +27,15 @@ NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 227  # 182
-PRINT_TIME_SECONDS = 6
 NO_PACKETS = -1
-
+DEFAULT_PRINT_TIME_SECONDS = 10
 
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData | None
     device_address: str | None
     device_name: str | None
     print_enabled: bool
+    print_time_buffer: int
     client: BleakClient | None = None
 
     def __init__(
@@ -44,6 +44,7 @@ class InstaxBLEAK:
         device_address: str | None = None,
         device_name: str | None = None,
         print_enabled: bool = False,
+        print_time_buffer: bool = DEFAULT_PRINT_TIME_SECONDS,
     ):
         """
         Initialize the InstaxBLE class.
@@ -56,6 +57,7 @@ class InstaxBLEAK:
         self.printer_settings = printer_settings
         self.chunk_size: int = printer_settings.chunk_size
         self.print_enabled: bool = print_enabled
+        self.print_time_buffer: int = print_time_buffer
         self.device_name: str = device_name.upper() if device_name else None
         self.device_address: str = (
             device_address.upper() if device_address else None
@@ -562,7 +564,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         with move_on_after(timeout):
             while len(self.packets_for_printing) > 0 or self.awaiting_print:
                 await asleep(poll_delay)
-            await asleep(PRINT_TIME_SECONDS)
+
+            # Wait for printer to physically print
+            await asleep(self.print_time_buffer)
             return
 
         logger.warning("Print image timeout exceeded, cancelling print.")
