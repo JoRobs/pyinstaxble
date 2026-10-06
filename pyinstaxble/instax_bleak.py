@@ -91,7 +91,12 @@ class InstaxBLEAK:
         )
 
     async def get_printer_info(self, timeout=5, poll_delay=0.05):
-        """Get and display the printer's status and info, like photos left and battery level"""
+        """
+        Get and display the printer's status and info, like photos left and battery level.
+
+        Raises:
+            PrinterTimeoutError: If the status is not returned after the timeout has elapsed.
+        """
 
         packet = self.create_packet(
             EventType.SUPPORT_FUNCTION_INFO,
@@ -265,7 +270,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         Scan for our device and return it when found.
 
         Raises:
-            PrinterTimeoutError: If no device is found before the timeout.
+            PrinterTimeoutError: If no device is found before the timeout has elapsed.
         """
         logger.debug("Searching for instax printer...")
 
@@ -476,7 +481,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         the bytearray to print directly
 
         Raises:
-            PrinterTimeoutError: If the image print is not complete before the timeout.
+            PrinterTimeoutError: If the image print is not complete before the timeout has elapsed.
         """
 
         if not self.is_connected():
