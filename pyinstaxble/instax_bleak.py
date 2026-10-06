@@ -27,8 +27,8 @@ NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 227  # 182
-PRINT_TIME_SECONDS = 6
 NO_PACKETS = -1
+DEFAULT_PRINT_TIME_SECONDS = 10
 
 
 class InstaxBLEAK:
@@ -36,6 +36,7 @@ class InstaxBLEAK:
     device_address: str | None
     device_name: str | None
     print_enabled: bool
+    print_time_buffer: int
     client: BleakClient | None = None
 
     def __init__(
@@ -44,6 +45,7 @@ class InstaxBLEAK:
         device_address: str | None = None,
         device_name: str | None = None,
         print_enabled: bool = False,
+        print_time_buffer: bool = DEFAULT_PRINT_TIME_SECONDS,
     ):
         """
         Initialize the InstaxBLE class.
@@ -56,6 +58,7 @@ class InstaxBLEAK:
         self.printer_settings = printer_settings
         self.chunk_size: int = printer_settings.chunk_size
         self.print_enabled: bool = print_enabled
+        self.print_time_buffer: int = print_time_buffer
         self.device_name: str = device_name.upper() if device_name else None
         self.device_address: str = (
             device_address.upper() if device_address else None
@@ -91,7 +94,12 @@ class InstaxBLEAK:
         )
 
     async def get_printer_info(self, timeout=5, poll_delay=0.05):
-        """Get and display the printer's status and info, like photos left and battery level"""
+        """
+        Get and display the printer's status and info, like photos left and battery level.
+
+        Raises:
+            PrinterTimeoutError: If the status is not returned after the timeout has elapsed.
+        """
 
         packet = self.create_packet(
             EventType.SUPPORT_FUNCTION_INFO,
@@ -265,7 +273,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         Scan for our device and return it when found.
 
         Raises:
-            PrinterTimeoutError: If no device is found before the timeout.
+            PrinterTimeoutError: If no device is found before the timeout has elapsed.
         """
         logger.debug("Searching for instax printer...")
 
@@ -476,7 +484,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         the bytearray to print directly
 
         Raises:
-            PrinterTimeoutError: If the image print is not complete before the timeout.
+            PrinterTimeoutError: If the image print is not complete before the timeout has elapsed.
         """
 
         if not self.is_connected():
@@ -557,7 +565,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         with move_on_after(timeout):
             while len(self.packets_for_printing) > 0 or self.awaiting_print:
                 await asleep(poll_delay)
-            await asleep(PRINT_TIME_SECONDS)
+
+            # Wait for printer to physically print
+            await asleep(self.print_time_buffer)
             return
 
         logger.warning("Print image timeout exceeded, cancelling print.")

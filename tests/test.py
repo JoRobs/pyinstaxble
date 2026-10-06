@@ -1,9 +1,8 @@
 import logging
 import random
-from datetime import datetime
 from os.path import abspath
 
-from anyio import create_task_group, run
+from anyio import create_task_group, get_cancelled_exc_class, run
 from anyio import sleep as asleep
 
 from pyinstaxble.exceptions import PrinterTimeoutError
@@ -27,31 +26,50 @@ async def check_connected(client):
     client.is_connected()
 
 
-async def main():
-    # scanner = bleak.BleakScanner()
-    # devices = await scanner.discover()
-
-    # d = next(device for device in devices if device.name and device.name.endswith("(BLE)"))
-
-    # async with bleak.BleakClient(d) as client:
-    #     await client.start_notify("70954784-2d83-473d-9e5f-81e1d02d5273", callback)
-    client = InstaxBLEAK(print_enabled=False)
-    async with create_task_group() as tg:
-        tg.start_soon(client.connect, 5)
-        tg.start_soon(check_connected, client)
-        tg.start_soon(check_connected, client)
-        tg.start_soon(check_connected, client)
-
-    logger.info(f"Client connected: {client.is_connected()}")
-    path = abspath("./resources/example-mini.jpg")
-    start_time = datetime.now()
+async def monitor_printer_info_loop(client: InstaxBLEAK):
     try:
-        await client.print_image(path, 1)
-    except PrinterTimeoutError:
-        logger.info("Print timout")
-    end_time = datetime.now()
-    logger.info(f"Time to print: {end_time - start_time}")
-    await client.disconnect()
+        while True:
+            try:
+                await client.get_printer_info()
+            except PrinterTimeoutError as e:
+                logger.warning(f"Get info timed out {e}")
+            await asleep(3)
+
+    except get_cancelled_exc_class():
+        logger.info("Stopping info monitoring")
+        await client.disconnect()
+        raise
+
+
+async def main():
+    try:
+        # scanner = bleak.BleakScanner()
+        # devices = await scanner.discover()
+
+        # d = next(device for device in devices if device.name and device.name.endswith("(BLE)"))
+
+        # async with bleak.BleakClient(d) as client:
+        #     await client.start_notify("70954784-2d83-473d-9e5f-81e1d02d5273", callback)
+        client = InstaxBLEAK(print_enabled=False)
+        async with create_task_group() as tg:
+            tg.start_soon(client.connect, 10)
+
+        logger.info(f"Client connected: {client.is_connected()}")
+        path = abspath("./resources/example-mini.jpg")
+        try:
+            async with create_task_group() as tg:
+                tg.start_soon(monitor_printer_info_loop, client)
+
+                await client.print_image(path, 25)
+                await client.print_image(path, 1)
+        except* PrinterTimeoutError as excgroup:
+            for e in excgroup.exceptions:
+                logger.exception("Task group failed")
+
+    except KeyboardInterrupt:
+        logger.warning("Interupted")
+    finally:
+        await client.disconnect()
 
 
 if __name__ == "__main__":
