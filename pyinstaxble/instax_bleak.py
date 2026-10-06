@@ -30,6 +30,7 @@ MAX_PACKET_SIZE = 227  # 182
 NO_PACKETS = -1
 DEFAULT_PRINT_TIME_SECONDS = 10
 
+
 class InstaxBLEAK:
     printer_settings: PrinterSettingsData | None
     device_address: str | None

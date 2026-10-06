@@ -1,9 +1,8 @@
 import logging
 import random
-from datetime import datetime
 from os.path import abspath
 
-from anyio import create_task_group, run, get_cancelled_exc_class
+from anyio import create_task_group, get_cancelled_exc_class, run
 from anyio import sleep as asleep
 
 from pyinstaxble.exceptions import PrinterTimeoutError
@@ -26,6 +25,7 @@ async def check_connected(client):
     await asleep(rand)
     client.is_connected()
 
+
 async def monitor_printer_info_loop(client: InstaxBLEAK):
     try:
         while True:
@@ -39,6 +39,7 @@ async def monitor_printer_info_loop(client: InstaxBLEAK):
         logger.info("Stopping info monitoring")
         await client.disconnect()
         raise
+
 
 async def main():
     try:
@@ -58,7 +59,6 @@ async def main():
         try:
             async with create_task_group() as tg:
                 tg.start_soon(monitor_printer_info_loop, client)
-
 
                 await client.print_image(path, 25)
                 await client.print_image(path, 1)
