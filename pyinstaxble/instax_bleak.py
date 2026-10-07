@@ -5,7 +5,7 @@ from math import ceil
 from struct import pack, unpack_from
 from uuid import UUID
 
-from anyio import Event, create_task_group, move_on_after
+from anyio import Event, Lock, create_task_group, move_on_after
 from anyio import sleep as asleep
 from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from bleak.exc import BleakError
@@ -68,6 +68,7 @@ class InstaxBLEAK:
         self.device_address: str = (
             device_address.upper() if device_address else None
         )
+        self.packet_lock = Lock()
         self.packets_for_printing: list = []
         self.total_packets_for_printing = NO_PACKETS
         self.pos = (0, 0, 0, 0)
@@ -76,8 +77,17 @@ class InstaxBLEAK:
         self.photos_left = 0
         self.is_charging = False
         self.image_size = (printer_settings.width, printer_settings.height)
-        self.cancelled = False
         self.scanner = BleakScanner(self.detection_callback)
+        self.awaiting_cancel: Event = Event()
+        self.awaiting_cancel.set()
+        self.awaiting_info_battery: Event = Event()
+        self.awaiting_info_battery.set()
+        self.awaiting_info_image: Event = Event()
+        self.awaiting_info_image.set()
+        self.awaiting_info_printfunc: Event = Event()
+        self.awaiting_info_printfunc.set()
+        self.awaiting_print: Event = Event()
+        self.awaiting_print.set()
 
     def detection_callback(self, device, data) -> None:
         if not data.local_name and device.name:
@@ -141,25 +151,27 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         logger.info(status_string)
 
     async def handle_image_packet_queue(self):
-        if self.cancelled:
-            logger.warning(
-                "Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue."
-            )
-            self.packets_for_printing = []
-            self.total_packets_for_printing = NO_PACKETS
-            return
+        async with self.packet_lock:
+            if not self.awaiting_cancel.is_set():
+                logger.warning(
+                    "Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue."
+                )
+                self.packets_for_printing = []
 
-        if len(self.packets_for_printing) == 0:
-            return
+                self.total_packets_for_printing = NO_PACKETS
+                return
 
-        remaining_packets = len(self.packets_for_printing) - 1
-        pct = 100 - 100 * remaining_packets / self.total_packets_for_printing
-        if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
-            logger.info(f"Image upload progress: {ceil(pct)}%")
-            logger.debug(
-                f"Img packets left to send: {len(self.packets_for_printing)}"
-            )
-        packet = self.packets_for_printing.pop(0)
+            if len(self.packets_for_printing) == 0:
+                return
+
+            remaining_packets = len(self.packets_for_printing) - 1
+            pct = 100 - 100 * remaining_packets / self.total_packets_for_printing
+            if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
+                logger.info(f"Image upload progress: {ceil(pct)}%")
+                logger.debug(
+                    f"Img packets left to send: {len(self.packets_for_printing)}"
+                )
+            packet = self.packets_for_printing.pop(0)
 
         await self.send_packet(packet)
 
@@ -436,26 +448,20 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
         logger.debug(f"> Number of parts to send: {numberOfParts}")
-        try:
-            for subPartIndex in range(numberOfParts):
-                logger.debug(
-                    f"> Sending part {subPartIndex + 1}/{numberOfParts}"
-                )
-                subPacket = packet[
-                    subPartIndex * MAX_PACKET_SIZE : subPartIndex
-                    * MAX_PACKET_SIZE
-                    + MAX_PACKET_SIZE
-                ]
+        for subPartIndex in range(numberOfParts):
+            logger.debug(
+                f"> Sending part {subPartIndex + 1}/{numberOfParts}"
+            )
+            subPacket = packet[
+                subPartIndex * MAX_PACKET_SIZE : subPartIndex
+                * MAX_PACKET_SIZE
+                + MAX_PACKET_SIZE
+            ]
 
-                await self.client.write_gatt_char(
-                    WRITECHAR_UUID, subPacket, response=False
-                )
+            await self.client.write_gatt_char(
+                WRITECHAR_UUID, subPacket, response=False
+            )
 
-        except KeyboardInterrupt:
-            self.cancelled = True
-            await self.cancel_print()
-            await self.disconnect()
-            sys.exit("Cancelled")
 
     async def print_image(self, img_src, timeout=25, poll_delay=0.10):
         """
@@ -484,61 +490,62 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             image = Image.open(img_src)
             imgData = self.pil_image_to_bytes(image, max_size_kb=105)
 
-        # logger.info(f"len of imagedata: {len(imgData)}")
-        self.packets_for_printing = [
-            # \x02\x00\x00\x00 payload made of four bytes: pictureType, picturePrintOption, picturePrintOption2, zero
-            self.create_packet(
-                EventType.PRINT_IMAGE_DOWNLOAD_START,
-                b"\x02\x00\x00\x00" + pack(">I", len(imgData)),
-            )
-        ]
+        async with self.packet_lock:
 
-        # divide image data up into chunks of <chunkSize> bytes and pad the last chunk with zeroes if needed
-        imgDataChunks = [
-            imgData[i : i + self.chunk_size]
-            for i in range(0, len(imgData), self.chunk_size)
-        ]
-        if len(imgDataChunks[-1]) < self.chunk_size:
-            imgDataChunks[-1] = imgDataChunks[-1] + bytes(
-                self.chunk_size - len(imgDataChunks[-1])
-            )
-
-        # create a packet from each of our chunks, this includes adding the chunk number
-        for index, chunk in enumerate(imgDataChunks):
-            imgDataChunks[index] = (
-                pack(">I", index) + chunk
-            )  # add chunk number as int (4 bytes)
-            self.packets_for_printing.append(
+            # logger.info(f"len of imagedata: {len(imgData)}")
+            self.packets_for_printing = [
+                # \x02\x00\x00\x00 payload made of four bytes: pictureType, picturePrintOption, picturePrintOption2, zero
                 self.create_packet(
-                    EventType.PRINT_IMAGE_DOWNLOAD_DATA, imgDataChunks[index]
+                    EventType.PRINT_IMAGE_DOWNLOAD_START,
+                    b"\x02\x00\x00\x00" + pack(">I", len(imgData)),
                 )
-            )
+            ]
 
-        self.packets_for_printing.append(
-            self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_END)
-        )
+            # divide image data up into chunks of <chunkSize> bytes and pad the last chunk with zeroes if needed
+            imgDataChunks = [
+                imgData[i : i + self.chunk_size]
+                for i in range(0, len(imgData), self.chunk_size)
+            ]
+            if len(imgDataChunks[-1]) < self.chunk_size:
+                imgDataChunks[-1] = imgDataChunks[-1] + bytes(
+                    self.chunk_size - len(imgDataChunks[-1])
+                )
 
-        if self.print_enabled:
+            # create a packet from each of our chunks, this includes adding the chunk number
+            for index, chunk in enumerate(imgDataChunks):
+                imgDataChunks[index] = (
+                    pack(">I", index) + chunk
+                )  # add chunk number as int (4 bytes)
+                self.packets_for_printing.append(
+                    self.create_packet(
+                        EventType.PRINT_IMAGE_DOWNLOAD_DATA, imgDataChunks[index]
+                    )
+                )
+
             self.packets_for_printing.append(
-                self.create_packet(EventType.PRINT_IMAGE)
-            )
-            self.packets_for_printing.append(
-                self.create_packet((0, 2), b"\x02")
-            )
-        else:
-            logger.info(
-                "Printing is disabled, sending all packets followed by a print cancel command"
-            )
-            self.awaiting_cancel = Event()
-            self.packets_for_printing.append(
-                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
+                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_END)
             )
 
-        self.total_packets_for_printing = len(self.packets_for_printing)
+            if self.print_enabled:
+                self.packets_for_printing.append(
+                    self.create_packet(EventType.PRINT_IMAGE)
+                )
+                self.packets_for_printing.append(
+                    self.create_packet((0, 2), b"\x02")
+                )
+            else:
+                logger.info(
+                    "Printing is disabled, sending all packets followed by a print cancel command"
+                )
+                self.packets_for_printing.append(
+                    self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
+                )
 
-        # send the first packet from our list, the packet handler will take care of the rest
+            self.total_packets_for_printing = len(self.packets_for_printing)
+
+            # send the first packet from our list, the packet handler will take care of the rest
+            packet = self.packets_for_printing.pop(0)
         self.awaiting_print = Event()
-        packet = self.packets_for_printing.pop(0)
         await self.send_packet(packet)
 
         uploaded = False
