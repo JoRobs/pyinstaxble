@@ -59,9 +59,9 @@ async def main():
         try:
             async with create_task_group() as tg:
                 tg.start_soon(monitor_printer_info_loop, client)
-
-                await client.print_image(path, 25)
+                tg.start_soon(client.cancel_print)
                 await client.print_image(path, 1)
+
         except* PrinterTimeoutError as excgroup:
             for e in excgroup.exceptions:
                 logger.exception("Task group failed")
@@ -73,4 +73,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    run(main)
+    try:
+        run(main)
+    except KeyboardInterrupt:
+        logger.warning("Interupted")
