@@ -5,7 +5,7 @@ from math import ceil
 from struct import pack, unpack_from
 from uuid import UUID
 
-from anyio import Lock, move_on_after
+from anyio import move_on_after, Event, create_task_group
 from anyio import sleep as asleep
 from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from bleak.exc import BleakError
@@ -38,6 +38,11 @@ class InstaxBLEAK:
     print_enabled: bool
     print_time_buffer: int
     client: BleakClient | None = None
+    awaiting_cancel: Event
+    awaiting_info_battery: Event
+    awaiting_info_image: Event
+    awaiting_info_printfunc: Event
+    awaiting_print: Event
 
     def __init__(
         self,
@@ -65,7 +70,6 @@ class InstaxBLEAK:
         )
         self.packets_for_printing: list = []
         self.total_packets_for_printing = NO_PACKETS
-        self.packet_lock = Lock()
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
         self.battery_percentage = 0
@@ -74,13 +78,6 @@ class InstaxBLEAK:
         self.image_size = (printer_settings.width, printer_settings.height)
         self.cancelled = False
         self.scanner = BleakScanner(self.detection_callback)
-
-        self.awaiting_cancel = False
-        self.awaiting_response = False
-        self.awaiting_info_battery = False
-        self.awaiting_info_image = False
-        self.awaiting_info_printfunc = False
-        self.awaiting_print = False
 
     def detection_callback(self, device, data) -> None:
         if not data.local_name and device.name:
@@ -105,30 +102,28 @@ class InstaxBLEAK:
             EventType.SUPPORT_FUNCTION_INFO,
             pack(">B", InfoType.IMAGE_SUPPORT_INFO.value),
         )
-        self.awaiting_info_image = True
+        self.awaiting_info_image = Event()
         await self.send_packet(packet)
 
         packet = self.create_packet(
             EventType.SUPPORT_FUNCTION_INFO,
             pack(">B", InfoType.BATTERY_INFO.value),
         )
-        self.awaiting_info_battery = True
+        self.awaiting_info_battery = Event()
         await self.send_packet(packet)
 
         packet = self.create_packet(
             EventType.SUPPORT_FUNCTION_INFO,
             pack(">B", InfoType.PRINTER_FUNCTION_INFO.value),
         )
-        self.awaiting_info_printfunc = True
+        self.awaiting_info_printfunc = Event()
         await self.send_packet(packet)
 
         with move_on_after(timeout):
-            while (
-                self.awaiting_info_battery
-                or self.awaiting_info_image
-                or self.awaiting_info_printfunc
-            ) and not self.cancelled:
-                await asleep(poll_delay)
+            async with create_task_group() as tg:
+                tg.start_soon(self.awaiting_info_battery.wait)
+                tg.start_soon(self.awaiting_info_printfunc.wait)
+                tg.start_soon(self.awaiting_info_image.wait)
             return
         raise PrinterTimeoutError(timeout)
 
@@ -145,26 +140,16 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         """
         logger.info(status_string)
 
-    def unawait_response(func):
-        def wrapper(self, *args, **kwargs):
-            try:
-                res = func(self, *args, **kwargs)
-                return res
-            finally:
-                self.awaiting_response = False
-
-        return wrapper
-
     async def handle_image_packet_queue(self):
-        if len(self.packets_for_printing) == 0:
-            return
-
         if self.cancelled:
             logger.warning(
                 "Printer has confirmed it recieved data but we are in a cancelled state, will not send more data. Clearing packet queue."
             )
             self.packets_for_printing = []
             self.total_packets_for_printing = NO_PACKETS
+            return
+
+        if len(self.packets_for_printing) == 0:
             return
 
         remaining_packets = len(self.packets_for_printing) - 1
@@ -174,8 +159,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.debug(
                 f"Img packets left to send: {len(self.packets_for_printing)}"
             )
-        async with self.packet_lock:
-            packet = self.packets_for_printing.pop(0)
+        packet = self.packets_for_printing.pop(0)
 
         await self.send_packet(packet)
 
@@ -229,19 +213,19 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                     logger.error(f"Unknown image size from printer: {w}x{h}")
 
                 self.chunk_size = self.printer_settings.chunk_size
-                self.awaiting_info_image = False
+                self.awaiting_info_image.set()
 
             elif infoType == InfoType.BATTERY_INFO:
                 self.battery_state, self.battery_percentage = unpack_from(
                     ">BB", packet[8:10]
                 )
-                self.awaiting_info_battery = False
+                self.awaiting_info_battery.set()
 
             elif infoType == InfoType.PRINTER_FUNCTION_INFO:
                 dataByte = packet[8]
                 self.photos_left = dataByte & 15
                 self.is_charging = (1 << 7) & dataByte >= 1
-                self.awaiting_info_printfunc = False
+                self.awaiting_info_printfunc.set()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_START:
             logger.debug("Received print download start confirmation")
@@ -257,12 +241,12 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
             logger.debug("Received print cancel confirmation")
-            self.awaiting_print = False
-            self.awaiting_cancel = False
+            self.awaiting_print.set()
+            self.awaiting_cancel.set()
 
         elif event == EventType.PRINT_IMAGE:
             logger.debug("Received print confirmation")
-            self.awaiting_print = False
+            self.awaiting_print.set()
             self.total_packets_for_printing = NO_PACKETS
 
         else:
@@ -374,17 +358,13 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         if len(self.packets_for_printing) > 0:
             logger.info("Sending print cancel command")
             self.cancelled = True  # Prevent more packets being sent
-            self.awaiting_cancel = True
+            self.awaiting_cancel = Event()
             await self.send_packet(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
 
             with move_on_after(timeout):
-                while (
-                    self.awaiting_cancel
-                    and len(self.packets_for_printing) != 0
-                ):
-                    await asleep(poll_delay)
+                await self.awaiting_cancel.wait()
                 self.cancelled = False
 
     def enable_printing(self):
@@ -454,7 +434,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         except:
             logger.exception("Unknown event type")
 
-        self.awaiting_response = True
         numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
         logger.debug(f"> Number of parts to send: {numberOfParts}")
         try:
@@ -550,6 +529,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.info(
                 "Printing is disabled, sending all packets followed by a print cancel command"
             )
+            self.awaiting_cancel = Event()
             self.packets_for_printing.append(
                 self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
             )
@@ -557,22 +537,24 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         self.total_packets_for_printing = len(self.packets_for_printing)
 
         # send the first packet from our list, the packet handler will take care of the rest
-        self.awaiting_print = True
-        async with self.packet_lock:
-            packet = self.packets_for_printing.pop(0)
+        self.awaiting_print = Event()
+        packet = self.packets_for_printing.pop(0)
         await self.send_packet(packet)
 
+        uploaded = False
         with move_on_after(timeout):
-            while len(self.packets_for_printing) > 0 or self.awaiting_print:
-                await asleep(poll_delay)
+            await self.awaiting_print.wait()
+            uploaded = True
 
+        if uploaded:
             # Wait for printer to physically print
+            logger.info("Print confirmed, waiting to physically print.")
             await asleep(self.print_time_buffer)
             return
-
-        logger.warning("Print image timeout exceeded, cancelling print.")
-        await self.cancel_print()
-        raise PrinterTimeoutError(timeout)
+        else:
+            logger.warning("Print image timeout exceeded, cancelling print.")
+            await self.cancel_print()
+            raise PrinterTimeoutError(timeout)
 
     def print_services(self):
         """Display and overview of the printer's services and characteristics"""
