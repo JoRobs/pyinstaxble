@@ -366,18 +366,30 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         await self.client.disconnect()
         logger.info("Disconnected")
 
-    async def cancel_print(self, timeout=5, poll_delay=0.1):
-        if len(self.packets_for_printing) > 0:
-            logger.info("Sending print cancel command")
-            self.cancelled = True  # Prevent more packets being sent
-            self.awaiting_cancel = Event()
-            await self.send_packet(
-                self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
-            )
+    async def cancel_print(self, timeout=10, poll_delay=0.1):
+        if self.awaiting_cancel and not self.awaiting_cancel.is_set():
+            logger.warning("Already cancelling")
+            return
 
-            with move_on_after(timeout):
-                await self.awaiting_cancel.wait()
-                self.cancelled = False
+        if self.awaiting_print and not self.awaiting_print.is_set():
+            cancelled, cancel_try, max_retry = False, 0, 3
+            logger.warning("Sending print cancel command")
+            while not cancelled and cancel_try < max_retry:
+                logger.warning(f"Cancel try count: {cancel_try}")
+                cancel_try += 1
+                self.awaiting_cancel = Event()
+                await self.send_packet(
+                    self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL)
+                )
+                with move_on_after(timeout):
+                    await self.awaiting_cancel.wait()
+                    cancelled = True
+            logger.warning("Print was cancelled sucessfully")
+
+
+        else:
+            logger.warning("Cancel was called but not print is in progress")
+
 
     def enable_printing(self):
         """Enable printing."""
