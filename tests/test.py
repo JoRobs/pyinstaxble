@@ -59,12 +59,8 @@ async def main():
         try:
             async with create_task_group() as tg:
                 tg.start_soon(monitor_printer_info_loop, client)
-
-            async with create_task_group() as tg:
+                tg.start_soon(client.cancel_print)
                 await client.print_image(path, 1)
-
-            async with create_task_group() as tg:
-                await client.print_image(path, 60)
 
         except* PrinterTimeoutError as excgroup:
             for e in excgroup.exceptions:
