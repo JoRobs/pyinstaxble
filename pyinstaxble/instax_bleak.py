@@ -1,5 +1,4 @@
 import logging
-import sys
 from io import BytesIO
 from math import ceil
 from struct import pack, unpack_from
@@ -165,7 +164,9 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 return
 
             remaining_packets = len(self.packets_for_printing) - 1
-            pct = 100 - 100 * remaining_packets / self.total_packets_for_printing
+            pct = (
+                100 - 100 * remaining_packets / self.total_packets_for_printing
+            )
             if len(self.packets_for_printing) % 10 == 0 or ceil(pct) == 100:
                 logger.info(f"Image upload progress: {ceil(pct)}%")
                 logger.debug(
@@ -386,10 +387,8 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                     cancelled = True
             logger.warning("Print was cancelled sucessfully")
 
-
         else:
             logger.warning("Cancel was called but not print is in progress")
-
 
     def enable_printing(self):
         """Enable printing."""
@@ -461,19 +460,15 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         numberOfParts = ceil(len(packet) / MAX_PACKET_SIZE)
         logger.debug(f"> Number of parts to send: {numberOfParts}")
         for subPartIndex in range(numberOfParts):
-            logger.debug(
-                f"> Sending part {subPartIndex + 1}/{numberOfParts}"
-            )
+            logger.debug(f"> Sending part {subPartIndex + 1}/{numberOfParts}")
             subPacket = packet[
-                subPartIndex * MAX_PACKET_SIZE : subPartIndex
-                * MAX_PACKET_SIZE
+                subPartIndex * MAX_PACKET_SIZE : subPartIndex * MAX_PACKET_SIZE
                 + MAX_PACKET_SIZE
             ]
 
             await self.client.write_gatt_char(
                 WRITECHAR_UUID, subPacket, response=False
             )
-
 
     async def print_image(self, img_src, timeout=25, poll_delay=0.10):
         """
@@ -503,7 +498,6 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             imgData = self.pil_image_to_bytes(image, max_size_kb=105)
 
         async with self.packet_lock:
-
             # logger.info(f"len of imagedata: {len(imgData)}")
             self.packets_for_printing = [
                 # \x02\x00\x00\x00 payload made of four bytes: pictureType, picturePrintOption, picturePrintOption2, zero
@@ -530,7 +524,8 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 )  # add chunk number as int (4 bytes)
                 self.packets_for_printing.append(
                     self.create_packet(
-                        EventType.PRINT_IMAGE_DOWNLOAD_DATA, imgDataChunks[index]
+                        EventType.PRINT_IMAGE_DOWNLOAD_DATA,
+                        imgDataChunks[index],
                     )
                 )
 
