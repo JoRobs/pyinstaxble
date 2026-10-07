@@ -99,7 +99,7 @@ class InstaxBLEAK:
             f"Device {device.name} detected BLE advertisement {data.local_name}"
         )
 
-    async def get_printer_info(self, timeout=5, poll_delay=0.05):
+    async def get_printer_info(self, timeout=5):
         """
         Get and display the printer's status and info, like photos left and battery level.
 
@@ -367,7 +367,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
         await self.client.disconnect()
         logger.info("Disconnected")
 
-    async def cancel_print(self, timeout=10, poll_delay=0.1):
+    async def cancel_print(self, timeout=10):
         if self.awaiting_cancel and not self.awaiting_cancel.is_set():
             logger.warning("Already cancelling")
             return
@@ -470,7 +470,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 WRITECHAR_UUID, subPacket, response=False
             )
 
-    async def print_image(self, img_src, timeout=25, poll_delay=0.10):
+    async def print_image(self, img_src, timeout=60):
         """
         Print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
