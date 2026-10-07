@@ -5,7 +5,7 @@ from math import ceil
 from struct import pack, unpack_from
 from uuid import UUID
 
-from anyio import move_on_after, Event, create_task_group
+from anyio import Event, create_task_group, move_on_after
 from anyio import sleep as asleep
 from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from bleak.exc import BleakError
