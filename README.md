@@ -10,10 +10,13 @@ Forked from https://github.com/javl/InstaxBLE
 
 This library is not published to a package repository, but it can still be used from the source.
 
-#### uv
+#### Using uv
 
-pyproject.toml
+Use `uv` sources to incldude this package as a dependency.
+
 ```toml
+# pyproject.toml
+
 dependencies = [
     "pyinstaxble",
 ]
@@ -24,15 +27,11 @@ pyinstaxble = [
 ]
 ```
 
-#### Clone
-```
-git clone git@github.com:JoRobs/pyinstaxble.git
-```
-
 ### Usage
 
-Connecting and printing an image
-```
+Connecting and printing an image:
+
+```python
 from anyio import run
 from pyinstaxble import InstaxBleak
 
