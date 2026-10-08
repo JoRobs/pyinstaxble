@@ -6,7 +6,7 @@ from anyio import create_task_group, get_cancelled_exc_class, run
 from anyio import sleep as asleep
 
 from pyinstaxble.exceptions import PrinterTimeoutError
-from pyinstaxble.instax_bleak import InstaxBLEAK
+from pyinstaxble import InstaxBLEAK
 
 logging.basicConfig(level=logging.DEBUG)
 
