@@ -35,10 +35,12 @@ Connecting and printing an image:
 from anyio import run
 from pyinstaxble import InstaxBleak
 
+
 async def main():
     client = InstaxBleak()
     await client.connect()
     await client.print("resources/example-mini.jpeg")
+
 
 if __name__ == "__main__":
     run(main)
