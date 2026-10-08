@@ -1,16 +1,14 @@
 # Instax-BLEAK
 
-Forked from https://github.com/javl/InstaxBLE
-
-## Control an Instax Link Printer From Python
-
 A python library for asynchronous communication with Instax printers.
+
+Forked from https://github.com/javl/InstaxBLE
 
 ## Getting Started
 
-### Include from source
+### Installation
 
-This library is not to a package repository, but it can still be used from the sources
+This library is not published to a package repository, but it can still be used from the source.
 
 #### uv
 
