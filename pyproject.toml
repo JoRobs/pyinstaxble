@@ -12,7 +12,7 @@ dependencies = [
   "anyio>=4.14.2",
   "bleak>=3.0.2",
   "pillow>=9.5.0",
-  "simplepyble>=1.2.0"
+  "simplepyble>=1.2.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +25,9 @@ lint = [
 profile=[
   "scalene~=2.3.0",
 ]
+test = [
+    "pytest>=9.1.1",
+]
 
 [tool.ruff]
 # Set the maximum line length to 79.
@@ -36,3 +39,7 @@ ignore = [
   "E722",   # Do not use bare `except`
   "DTZ005", # `datetime.datetime.now()` called without a `tz` argument
 ]
+
+[tool.pytest.ini_options]
+anyio_mode = "auto"
+pythonpath = ["pyinstaxble"]
