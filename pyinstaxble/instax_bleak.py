@@ -10,7 +10,11 @@ from bleak import AdvertisementData, BleakClient, BleakScanner, BLEDevice
 from bleak.exc import BleakError
 from PIL import Image
 
-from pyinstaxble.exceptions import PrinterTimeoutError
+from pyinstaxble.exceptions import (
+    PrinterNotConnectedError,
+    PrinterOutOfFilmError,
+    PrinterTimeoutError,
+)
 from pyinstaxble.instax_types import (
     EventType,
     InfoType,
@@ -75,7 +79,7 @@ class InstaxBLEAK:
         self.pos = (0, 0, 0, 0)
         self.battery_state = 0
         self.battery_percentage = 0
-        self.photos_left = 0
+        self.film_remaining = 0
         self.is_charging = False
         self.image_size = (printer_settings.width, printer_settings.height)
         self.scanner = BleakScanner(self.detection_callback)
@@ -144,7 +148,7 @@ class InstaxBLEAK:
         status_string = f"""
 Printer details:
 Model:               {self.printer_settings.model_name}
-Photos left:         {self.photos_left}/10
+Photos left:         {self.film_remaining}/10
 Battery level:       {self.battery_percentage}%
 Charging:            {self.is_charging}
 Required image size: {self.printer_settings.width}px, {self.printer_settings.height}px
@@ -238,7 +242,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
             elif infoType == InfoType.PRINTER_FUNCTION_INFO:
                 dataByte = packet[8]
-                self.photos_left = dataByte & 15
+                self.film_remaining = dataByte & 15
                 self.is_charging = (1 << 7) & dataByte >= 1
                 self.awaiting_info_printfunc.set()
 
@@ -483,11 +487,11 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
 
         if not self.is_connected():
             logger.error("No connected device, run connect first.")
-            return
+            raise PrinterNotConnectedError()
 
-        if self.photos_left == 0 and self.print_enabled:
+        if self.film_remaining == 0 and self.print_enabled:
             logger.error("Cannot print, no film left in printer.")
-            return
+            raise PrinterOutOfFilmError()
 
         logger.info(f'Printing image "{img_src}"')
         imgData = img_src
