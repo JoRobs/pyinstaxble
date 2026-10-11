@@ -24,8 +24,8 @@ def anyio_backend():
 
 
 @pytest.fixture
-def instaxbleak():
-    return InstaxBLEAK(
+def mock_instaxbleak(monkeypatch):
+    instaxbleak = InstaxBLEAK(
         device_address=None,
         device_name=None,
         print_enabled=False,
@@ -33,9 +33,6 @@ def instaxbleak():
         printer_settings=PrinterSettings.MINI,
     )
 
-
-@pytest.fixture
-def mock_connected_instaxbleak(instaxbleak, monkeypatch):
     @dataclass
     class MockBleakDevice:
         name = "mock_device"
@@ -75,25 +72,24 @@ def mock_connected_instaxbleak(instaxbleak, monkeypatch):
     return instaxbleak
 
 
-async def test_is_connected(mock_connected_instaxbleak):
+async def test_is_connected(mock_instaxbleak):
     """True when client says it is connected"""
-    assert mock_connected_instaxbleak.is_connected()
+    assert mock_instaxbleak.is_connected()
 
 
-async def test_is_connected_no_client(instaxbleak):
+async def test_is_connected_no_client(mock_instaxbleak):
     """False when client says it is not connected, before connect()"""
-    assert not instaxbleak.is_connected()
+    mock_instaxbleak.client.is_connected = False
+    assert not mock_instaxbleak.is_connected()
 
 
-async def test_is_connected_client_disconnected(mock_connected_instaxbleak):
+async def test_is_connected_client_disconnected(mock_instaxbleak):
     """False when client says it is not connected"""
-    mock_connected_instaxbleak.client.is_connected = False
-    assert not mock_connected_instaxbleak.is_connected()
+    mock_instaxbleak.client.is_connected = False
+    assert not mock_instaxbleak.is_connected()
 
 
-async def test_is_connected_client_no_services(
-    mock_connected_instaxbleak, monkeypatch
-):
+async def test_is_connected_client_no_services(mock_instaxbleak, monkeypatch):
     """False if client raises services are not available"""
 
     class MockBleakClient:
@@ -103,24 +99,22 @@ async def test_is_connected_client_no_services(
         def services(self) -> tuple:
             raise BleakError()
 
-    monkeypatch.setattr(
-        mock_connected_instaxbleak, "client", MockBleakClient()
-    )
-    assert not mock_connected_instaxbleak.is_connected()
+    monkeypatch.setattr(mock_instaxbleak, "client", MockBleakClient())
+    assert not mock_instaxbleak.is_connected()
 
 
-async def test_print_not_connected(mock_connected_instaxbleak):
+async def test_print_not_connected(mock_instaxbleak):
     """If we try to print when not connected, raise PrinterNotConnectedError"""
-    mock_connected_instaxbleak.is_connected = lambda: False
+    mock_instaxbleak.is_connected = lambda: False
 
     with pytest.raises(PrinterNotConnectedError):
-        await mock_connected_instaxbleak.print_image("")
+        await mock_instaxbleak.print_image("")
 
 
-async def test_print_no_film(mock_connected_instaxbleak):
+async def test_print_no_film(mock_instaxbleak):
     """If we try to when there is no film, raise PrinterOutOfFilmError"""
-    mock_connected_instaxbleak.film_remaining = 0
-    mock_connected_instaxbleak.print_enabled = True
+    mock_instaxbleak.film_remaining = 0
+    mock_instaxbleak.print_enabled = True
 
     with pytest.raises(PrinterOutOfFilmError):
-        await mock_connected_instaxbleak.print_image("")
+        await mock_instaxbleak.print_image("")
