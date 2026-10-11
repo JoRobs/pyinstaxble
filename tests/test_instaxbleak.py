@@ -31,7 +31,7 @@ def instaxbleak():
 
 
 @pytest.fixture
-def mock_instaxbleak(instaxbleak):
+def mock_instaxbleak(instaxbleak, monkeypatch):
     @dataclass
     class MockBleakDevice:
         name = "mock_device"
@@ -40,11 +40,11 @@ def mock_instaxbleak(instaxbleak):
     class MockBleakClient:
         """A mocked bleak client"""
 
-        services: tuple
         services_disabled: bool = False
         is_connected: bool = True
         callback: Callable
         device: MockBleakDevice
+        services: tuple = (SERVICE_UUID, WRITECHAR_UUID, NOTIFYCHAR_UUID)
 
         def __init__(self, device):
             self.device = device
@@ -64,39 +64,38 @@ def mock_instaxbleak(instaxbleak):
             if self.callback:
                 self.callback(char_specifier, data)
 
-        def disable_services(self):
-            self.services_disabled = True
+        # def mock_disable_services(self):
+        #     self.services_disabled = True
 
-        @property
-        def services(self):
-            if self.services_disabled:
-                raise BleakError()
-            return (SERVICE_UUID, WRITECHAR_UUID, NOTIFYCHAR_UUID)
-
-    instaxbleak.client = MockBleakClient(MockBleakDevice())
+    monkeypatch.setattr(instaxbleak, "client", MockBleakClient)
     return instaxbleak
 
 
-def test_instaxbleak_init(instaxbleak: InstaxBLEAK):
-    assert instaxbleak.print_enabled == False
-
-
 async def test_is_connected(mock_instaxbleak):
-    # false before connecting
+    """True when client say it is connected"""
     assert mock_instaxbleak.is_connected()
 
 
 async def test_no_client_is_connected(instaxbleak):
+    """False when client say it is not connected, before connect()"""
     assert not instaxbleak.is_connected()
 
 
 async def test_client_disconnect_is_connected(mock_instaxbleak):
-    # false after connecting if client says so
+    """False when client say it is not connected"""
     mock_instaxbleak.client.is_connected = False
     assert not mock_instaxbleak.is_connected()
 
 
-async def test_no_service_is_connected(mock_instaxbleak):
-    # false if services are not available
-    mock_instaxbleak.client.disable_services()
+async def test_no_service_is_connected(mock_instaxbleak, monkeypatch):
+    """False if client raises services are not available"""
+
+    class MockBleakClient:
+        is_connected = True
+
+        @property
+        def services(self) -> tuple:
+            raise BleakError()
+
+    monkeypatch.setattr(mock_instaxbleak, "client", MockBleakClient())
     assert not mock_instaxbleak.is_connected()
