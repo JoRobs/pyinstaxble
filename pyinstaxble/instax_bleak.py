@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 SERVICE_UUID = UUID("70954782-2d83-473d-9e5f-81e1d02d5273")
 WRITECHAR_UUID = UUID("70954783-2d83-473d-9e5f-81e1d02d5273")
 NOTIFYCHAR_UUID = UUID("70954784-2d83-473d-9e5f-81e1d02d5273")
+SERVICE_ID = 17
+
 INSTAX_DEVICE_NAME_PREFIX = "INSTAX-"
 INSTAX_DEVICE_NAME_SUFFIX = "(BLE)"
 MAX_PACKET_SIZE = 227  # 182
@@ -649,7 +651,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
             logger.debug("Client exists but is not connected")
             return False
         try:
-            _ = self.client.services
+            _ = (s for s in self.client.services)
         except BleakError:
             logger.debug(
                 "Client exists and is connected but waiting on service discovery"
