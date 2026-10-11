@@ -476,7 +476,7 @@ Required image size: {self.printer_settings.width}px, {self.printer_settings.hei
                 WRITECHAR_UUID, subPacket, response=False
             )
 
-    async def print_image(self, img_src, timeout=60):
+    async def print_image(self, img_src: str | BytesIO, timeout=60):
         """
         Print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly

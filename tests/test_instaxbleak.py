@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from io import BytesIO
 
+from PIL import Image
 import pytest
 from anyio import sleep as asleep
 from bleak.exc import BleakError
@@ -44,31 +46,25 @@ def mock_instaxbleak(monkeypatch):
         services_disabled: bool = False
         is_connected: bool = True
         callback: Callable
-        device: MockBleakDevice
+        device: MockBleakDevice | None
         services: tuple = (SERVICE_UUID, WRITECHAR_UUID, NOTIFYCHAR_UUID)
 
         def __init__(self, device):
+            self.callback = instaxbleak.notification_handler
             self.device = device
 
         async def connect(self):
-            await asleep(1)
-
-        async def start_notify(self, char_specifier, callback):
-            self.callback = callback
-            await asleep(1)
+            self.is_connected = True
 
         async def disconnect(self):
-            await asleep(1)
+            self.is_connected = False
+            self.callback = None
+            self.device = None
 
-        async def write_gatt_char(self, char_specifier, data, _):
-            await asleep(1)
-            if self.callback:
-                self.callback(char_specifier, data)
+        async def write_gatt_char(self, char_specifier, data, response):
+            await self.callback(char_specifier, data)
 
-        # def mock_disable_services(self):
-        #     self.services_disabled = True
-
-    monkeypatch.setattr(instaxbleak, "client", MockBleakClient)
+    monkeypatch.setattr(instaxbleak, "client", MockBleakClient(MockBleakDevice))
     return instaxbleak
 
 
@@ -79,7 +75,7 @@ async def test_is_connected(mock_instaxbleak):
 
 async def test_is_connected_no_client(mock_instaxbleak):
     """False when client says it is not connected, before connect()"""
-    mock_instaxbleak.client.is_connected = False
+    mock_instaxbleak.client = None
     assert not mock_instaxbleak.is_connected()
 
 
@@ -91,7 +87,6 @@ async def test_is_connected_client_disconnected(mock_instaxbleak):
 
 async def test_is_connected_client_no_services(mock_instaxbleak, monkeypatch):
     """False if client raises services are not available"""
-
     class MockBleakClient:
         is_connected = True
 
@@ -116,5 +111,17 @@ async def test_print_no_film(mock_instaxbleak):
     mock_instaxbleak.film_remaining = 0
     mock_instaxbleak.print_enabled = True
 
+
     with pytest.raises(PrinterOutOfFilmError):
         await mock_instaxbleak.print_image("")
+
+async def test_print(mock_instaxbleak):
+    """If we try to print with a connected client do not raise an exception"""
+
+    mode = "RGB"
+    stream = BytesIO()
+    with stream as img:
+        Image.new(mode, (800,800)).save(img, format="jpeg")
+        img.seek(0)
+        mock_instaxbleak.print_time_buffer = 0
+        await mock_instaxbleak.print_image(img, timeout=1)
